@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Healdox Pitch Deck</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f172a;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        .slide-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .slide {
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 80px;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .slide.active {
+            display: flex;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .logo-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: bold;
+            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3);
+        }
+
+        .logo-text {
+            font-size: 42px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        h1 {
+            font-size: 64px;
+            font-weight: 800;
+            margin-bottom: 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #fff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        h2 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 40px;
+            text-align: center;
+            color: #3b82f6;
+        }
+
+        .subtitle {
+            font-size: 28px;
+            color: #94a3b8;
+            margin-bottom: 40px;
+            text-align: center;
+            font-style: italic;
+        }
+
+        .tagline {
+            font-size: 32px;
+            color: #06b6d4;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .content {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        .problem-list, .solution-list, .feature-list {
+            list-style: none;
+            font-size: 24px;
+            line-height: 1.8;
+            color: #e2e8f0;
+        }
+
+        .problem-list li, .solution-list li, .feature-list li {
+            margin-bottom: 20px;
+            padding-left: 40px;
+            position: relative;
+        }
+
+        .problem-list li:before {
+            content: "❌";
+            position: absolute;
+            left: 0;
+            font-size: 28px;
+        }
+
+        .solution-list li:before {
+            content: "✅";
+            position: absolute;
+            left: 0;
+            font-size: 28px;
+        }
+
+        .feature-list li:before {
+            content: "●";
+            position: absolute;
+            left: 0;
+            font-size: 32px;
+            color: #3b82f6;
+        }
+
+        .stat {
+            display: inline-block;
+            color: #06b6d4;
+            font-weight: 700;
+            font-size: 28px;
+        }
+
+        .highlight {
+            color: #3b82f6;
+            font-weight: 700;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .card {
+            background: rgba(30, 41, 59, 0.6);
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .card h3 {
+            color: #3b82f6;
+            font-size: 28px;
+            margin-bottom: 15px;
+        }
+
+        .card p, .card ul {
+            font-size: 20px;
+            line-height: 1.6;
+            color: #cbd5e1;
+        }
+
+        .card ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .card ul li {
+            margin-bottom: 10px;
+            padding-left: 25px;
+            position: relative;
+        }
+
+        .card ul li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #06b6d4;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 30px;
+            font-size: 20px;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        th {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            font-weight: 700;
+        }
+
+        td {
+            color: #e2e8f0;
+        }
+
+        .navigation {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            gap: 15px;
+            z-index: 1000;
+        }
+
+        .nav-btn {
+            background: rgba(59, 130, 246, 0.8);
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .nav-btn:hover {
+            background: rgba(59, 130, 246, 1);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
+        }
+
+        .slide-number {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            color: #64748b;
+            font-size: 18px;
+            z-index: 1000;
+        }
+
+        .emoji {
+            font-size: 48px;
+            margin-right: 15px;
+        }
+
+        .cta-box {
+            background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+            padding: 50px;
+            border-radius: 16px;
+            text-align: center;
+            margin-top: 40px;
+        }
+
+        .cta-box h3 {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        .cta-box p {
+            font-size: 24px;
+            line-height: 1.6;
+        }
+
+        .mini-logo {
+            position: fixed;
+            top: 30px;
+            left: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .mini-logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .mini-logo-text {
+            font-size: 24px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .quote {
+            font-size: 28px;
+            font-style: italic;
+            color: #94a3b8;
+            text-align: center;
+            margin-top: 30px;
+            padding: 30px;
+            border-left: 4px solid #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 8px;
+        }
+
+        .revenue-streams {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .revenue-item {
+            background: rgba(59, 130, 246, 0.1);
+            padding: 25px;
+            border-radius: 12px;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .revenue-item h4 {
+            color: #06b6d4;
+            font-size: 22px;
+            margin-bottom: 10px;
+        }
+
+        .revenue-item p {
+            color: #e2e8f0;
+            font-size: 18px;
+        }
+
+        @media print {
+            .navigation, .slide-number { display: none; }
+            .slide { page-break-after: always; }
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <!-- Slide 1: Title -->
+        <div class="slide active">
+            <div class="logo">
+                <div class="logo-icon">H+</div>
+                <div class="logo-text">HEALDOX</div>
+            </div>
+            <div class="subtitle">Empowering Healthcare Through Connection</div>
+            <h1>Transforming Patient Care</h1>
+            <p class="tagline">A Secure Social Healthcare Platform</p>
+        </div>
+
+        <!-- Slide 2: The Problem -->
+        <div class="slide">
+            <div class="content">
+                <h2>The Problem</h2>
+                <p class="tagline">Healthcare is Fragmented & Isolated</p>
+                <ul class="problem-list">
+                    <li><span class="stat">73%</span> of patients struggle to find trustworthy healthcare information</li>
+                    <li>Medical records are scattered across multiple providers</li>
+                    <li><span class="highlight">Limited transparency</span> in provider selection and quality</li>
+                    <li>Patients lack control over their own health data</li>
+                    <li><span class="highlight">No platform</span> connects patients, providers, and researchers seamlessly</li>
+                    <li>Traditional healthcare communication is slow and inefficient</li>
+                </ul>
+                <p class="quote">The healthcare system needs a unified, patient-centric solution</p>
+            </div>
+        </div>
+
+        <!-- Slide 3: The Solution -->
+        <div class="slide">
+            <div class="content">
+                <h2>The Solution</h2>
+                <p class="tagline">Healdox: A Comprehensive Healthcare Social Platform</p>
+                <ul class="solution-list">
+                    <li>Connects patients with verified healthcare providers</li>
+                    <li>Empowers patients to control and share medical records</li>
+                    <li>Facilitates peer-to-peer health journey sharing</li>
+                    <li>Enables direct provider-patient communication</li>
+                    <li>Provides free consultation marketplace</li>
+                    <li>Supports healthcare research with consented data</li>
+                </ul>
+                <p class="quote">Healthcare collaboration, redefined</p>
+            </div>
+        </div>
+
+        <!-- Slide 4: Market Opportunity -->
+        <div class="slide">
+            <div class="content">
+                <h2>Market Opportunity</h2>
+                <p class="tagline">Massive & Growing Market</p>
+                <div class="grid">
+                    <div class="card">
+                        <h3>📈 Market Size</h3>
+                        <ul>
+                            <li>Digital Health: $211B → $639B (2030)</li>
+                            <li>CAGR: 17.2% annual growth</li>
+                            <li>Telehealth: 1.5B+ users by 2025</li>
+                            <li>Health Social Networks: $8B+ segment</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h3>🎯 Target Segments</h3>
+                        <ul>
+                            <li>330M+ potential users (US + India)</li>
+                            <li>1M+ healthcare providers</li>
+                            <li>5,000+ pharmaceutical companies</li>
+                            <li>Healthcare systems & hospitals</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Product - Patient Features -->
+        <div class="slide">
+            <div class="content">
+                <h2>Product: Patient Features</h2>
+                <p class="tagline">Empowering Patients</p>
+                <div class="grid">
+                    <div class="card">
+                        <h3>🏥 Healthcare Journey Sharing</h3>
+                        <p>Share experiences, build community support</p>
+                    </div>
+                    <div class="card">
+                        <h3>🔍 Smart Provider Discovery</h3>
+                        <p>Find verified doctors by specialty, ratings, reviews</p>
+                    </div>
+                    <div class="card">
+                        <h3>💬 Symptom Discussions</h3>
+                        <p>Community-driven health conversations</p>
+                    </div>
+                    <div class="card">
+                        <h3>📋 Medical Records Control</h3>
+                        <p>Secure storage with granular access permissions</p>
+                    </div>
+                    <div class="card">
+                        <h3>🆓 Free Consultation Marketplace</h3>
+                        <p>Access provider offers, reduce healthcare costs</p>
+                    </div>
+                    <div class="card">
+                        <h3>🤖 AI Healthcare Assistant</h3>
+                        <p>Intelligent search and health guidance</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: Product - Provider Features -->
+        <div class="slide">
+            <div class="content">
+                <h2>Product: Provider Features</h2>
+                <p class="tagline">Supporting Healthcare Professionals</p>
+                <div class="grid">
+                    <div class="card">
+                        <h3>👨‍⚕️ Professional Dashboard</h3>
+                        <p>Manage patients, consultations, sessions</p>
+                    </div>
+                    <div class="card">
+                        <h3>📊 Service Management</h3>
+                        <p>List specialties, expertise, availability</p>
+                    </div>
+                    <div class="card">
+                        <h3>🎁 Free Consultation Offers</h3>
+                        <p>Attract new patients, build practice</p>
+                    </div>
+                    <div class="card">
+                        <h3>💊 Medical Suggestions</h3>
+                        <p>Provide professional guidance to patients</p>
+                    </div>
+                    <div class="card">
+                        <h3>🔒 Secure Record Access</h3>
+                        <p>Request patient records with authorization</p>
+                    </div>
+                    <div class="card">
+                        <h3>⭐ Reputation Building</h3>
+                        <p>Verified profiles, patient reviews, credentials</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Unique Value -->
+        <div class="slide">
+            <div class="content">
+                <h2>What Sets Healdox Apart</h2>
+                <div class="grid">
+                    <div class="card">
+                        <h3>1. Multi-Stakeholder Platform</h3>
+                        <p>Patients, Providers, Pharma, Admins in one ecosystem</p>
+                    </div>
+                    <div class="card">
+                        <h3>2. Data Ownership</h3>
+                        <p>Patients control who accesses their health data</p>
+                    </div>
+                    <div class="card">
+                        <h3>3. Trust & Verification</h3>
+                        <p>Provider verification system ensures credibility</p>
+                    </div>
+                    <div class="card">
+                        <h3>4. Free Access Layer</h3>
+                        <p>Free consultation marketplace reduces barriers</p>
+                    </div>
+                    <div class="card">
+                        <h3>5. Research Integration</h3>
+                        <p>Pharma companies access consented data for research</p>
+                    </div>
+                    <div class="card">
+                        <h3>6. HIPAA-Conscious</h3>
+                        <p>Bank-level security, RLS policies, encrypted storage</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Business Model -->
+        <div class="slide">
+            <div class="content">
+                <h2>Business Model</h2>
+                <p class="tagline">Multiple Revenue Streams</p>
+                <div class="revenue-streams">
+                    <div class="revenue-item">
+                        <h4>💳 Provider Subscriptions</h4>
+                        <p>$29-$199/month (tiered plans)</p>
+                    </div>
+                    <div class="revenue-item">
+                        <h4>🏢 Pharma Data Access</h4>
+                        <p>$5,000-$50,000/project</p>
+                    </div>
+                    <div class="revenue-item">
+                        <h4>💰 Transaction Fees</h4>
+                        <p>15% on paid consultations</p>
+                    </div>
+                    <div class="revenue-item">
+                        <h4>🎯 Premium Features</h4>
+                        <p>$9.99/month for patients</p>
+                    </div>
+                </div>
+                <div class="cta-box" style="margin-top: 40px;">
+                    <h3>Target: $50M ARR by Year 3</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Competitive Landscape -->
+        <div class="slide">
+            <div class="content">
+                <h2>Competitive Landscape</h2>
+                <p class="tagline">Healdox vs. Competition</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>Healdox</th>
+                            <th>Doximity</th>
+                            <th>PatientsLikeMe</th>
+                            <th>Zocdoc</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Patient Social</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                        </tr>
+                        <tr>
+                            <td>Provider Network</td>
+                            <td>✅</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>Medical Records</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                            <td>Limited</td>
+                            <td>❌</td>
+                        </tr>
+                        <tr>
+                            <td>Data Control</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                            <td>❌</td>
+                            <td>❌</td>
+                        </tr>
+                        <tr>
+                            <td>Free Consultations</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                            <td>❌</td>
+                            <td>❌</td>
+                        </tr>
+                        <tr>
+                            <td>Pharma Integration</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p class="quote">Only platform integrating ALL stakeholders with patient data control</p>
+            </div>
+        </div>
+
+        <!-- Slide 10: Traction -->
+        <div class="slide">
+            <div class="content">
+                <h2>Traction & Milestones</h2>
+                <p class="tagline">Current Status: MVP Complete</p>
+                <div class="grid">
+                    <div class="card">
+                        <h3>✅ Achieved</h3>
+                        <ul>
+                            <li>Full-featured platform built</li>
+                            <li>Multi-role authentication</li>
+                            <li>Medical records management</li>
+                            <li>Real-time messaging</li>
+                            <li>Free consultation marketplace</li>
+                            <li>AI healthcare assistant</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h3>🎯 Next 90 Days</h3>
+                        <ul>
+                            <li>Beta launch with 50 providers</li>
+                            <li>1,000 patient signups</li>
+                            <li>First pharma partnership</li>
+                            <li>HIPAA compliance certification</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="cta-box" style="margin-top: 30px;">
+                    <h3>Next 12 Months</h3>
+                    <p>5,000 providers • 100,000 patients • $500K ARR • Series A fundraise</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 11: Financial Projections -->
+        <div class="slide">
+            <div class="content">
+                <h2>Financial Projections</h2>
+                <p class="tagline">5-Year Growth Trajectory</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Year</th>
+                            <th>Providers</th>
+                            <th>Patients</th>
+                            <th>Revenue</th>
+                            <th>EBITDA</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Y1</td>
+                            <td>5,000</td>
+                            <td>100K</td>
+                            <td>$2M</td>
+                            <td>-$1M</td>
+                        </tr>
+                        <tr>
+                            <td>Y2</td>
+                            <td>20,000</td>
+                            <td>500K</td>
+                            <td>$12M</td>
+                            <td>$2M</td>
+                        </tr>
+                        <tr>
+                            <td>Y3</td>
+                            <td>50,000</td>
+                            <td>2M</td>
+                            <td>$50M</td>
+                            <td>$20M</td>
+                        </tr>
+                        <tr>
+                            <td>Y4</td>
+                            <td>100,000</td>
+                            <td>5M</td>
+                            <td>$150M</td>
+                            <td>$75M</td>
+                        </tr>
+                        <tr>
+                            <td>Y5</td>
+                            <td>200,000</td>
+                            <td>10M</td>
+                            <td>$400M</td>
+                            <td>$200M</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p class="quote">Assumptions: 40% provider adoption • 30% platform fees • 20% churn • 70% gross margins by Y3</p>
+            </div>
+        </div>
+
+        <!-- Slide 12: Use of Funds -->
+        <div class="slide">
+            <div class="content">
+                <h2>Use of Funds</h2>
+                <p class="tagline">Seed Round: $2M</p>
+                <div class="revenue-streams">
+                    <div class="revenue-item">
+                        <h4>💰 Product Development (35%)</h4>
+                        <p>$700K - Mobile apps, AI enhancement, telemedicine integration</p>
+                    </div>
+                    <div class="revenue-item">
+                        <h4>🚀 Marketing & Growth (30%)</h4>
+                        <p>$600K - Provider acquisition, patient marketing, partnerships</p>
+                    </div>
+                    <div class="revenue-item">
+                        <h4>👥 Team Expansion (20%)</h4>
+                        <p>$400K - 5 engineers, 2 marketers, compliance officer, CS manager</p>
+                    </div>
+                    <div class="revenue-item">
+                        <h4>🏥 Operations & Compliance (15%)</h4>
+                        <p>$300K - HIPAA certification, legal, infrastructure, working capital</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 13: Vision -->
+        <div class="slide">
+            <div class="content">
+                <h2>The Vision</h2>
+                <p class="tagline">The Future of Healthcare</p>
+                <div class="grid">
+                    <div class="card">
+                        <h3>📅 Short-term (1-3 years)</h3>
+                        <ul>
+                            <li>Leading US healthcare social platform</li>
+                            <li>100K+ providers, 5M+ patients</li>
+                            <li>Standard for patient data control</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h3>🌍 Mid-term (3-5 years)</h3>
+                        <ul>
+                            <li>Global expansion (EU, Asia, LATAM)</li>
+                            <li>AI-powered diagnostics support</li>
+                            <li>Integration with EHR systems</li>
+                            <li>Healthcare marketplace leader</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="cta-box" style="margin-top: 30px;">
+                    <h3>Long-term (5-10 years)</h3>
+                    <p>Universal health record standard • 50M+ global users • Healthcare AI research leader • Preventive care revolution</p>
+                </div>
+                <p class="quote">Making healthcare collaborative, transparent, and patient-centric</p>
+            </div>
+        </div>
+
+        <!-- Slide 14: The Ask -->
+        <div class="slide">
+            <div class="content">
+                <h2>The Ask</h2>
+                <p class="tagline">Seed Round: $2M</p>
+                <div class="grid">
+                    <div class="card">
+                        <h3>🎁 What You Get</h3>
+                        <ul>
+                            <li>Entry into massive, growing market</li>
+                            <li>Proven MVP with strong product-market fit</li>
+                            <li>Experienced team with healthcare expertise</li>
+                            <li>Clear path to profitability</li>
+                            <li>Multiple exit opportunities</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h3>💎 Projected Returns</h3>
+                        <ul>
+                            <li>50x potential at $100M valuation (Series B)</li>
+                            <li>Clear acquisition targets: Epic, Cerner, Teladoc</li>
+                            <li>IPO potential at $1B+ valuation</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="cta-box" style="margin-top: 40px;">
+                    <h3>Join us in transforming healthcare</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 15: Contact -->
+        <div class="slide">
+            <div class="logo">
+                <div class="logo-icon">H+</div>
+                <div class="logo-text">HEALDOX</div>
+            </div>
+            <h1>Let's Build the Future of Healthcare Together</h1>
+            <div class="cta-box" style="margin-top: 40px; max-width: 800px;">
+                <h3>Contact Us</h3>
+                <p style="margin-top: 20px;">
+                    [Your Name], CEO<br>
+                    [Email Address]<br>
+                    [Phone Number]<br>
+                    [Website URL]
+                </p>
+                <p style="margin-top: 30px; font-size: 20px;">
+                    Schedule a Demo | Follow Us on LinkedIn, Twitter, Facebook
+                </p>
+            </div>
+            <p class="quote" style="margin-top: 40px;">Thank you for your consideration</p>
+        </div>
+    </div>
+
+    <!-- Mini Logo (appears on all slides except first) -->
+    <div class="mini-logo" id="miniLogo" style="display: none;">
+        <div class="mini-logo-icon">H+</div>
+        <div class="mini-logo-text">HEALDOX</div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="navigation">
+        <button class="nav-btn" onclick="previousSlide()">← Previous</button>
+        <button class="nav-btn" onclick="nextSlide()">Next →</button>
+    </div>
+
+    <!-- Slide Number -->
+    <div class="slide-number" id="slideNumber">1 / 15</div>
+
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+        const miniLogo = document.getElementById('miniLogo');
+
+        function showSlide(n) {
+            slides[currentSlide].classList.remove('active');
+            currentSlide = (n + totalSlides) % totalSlides;
+            slides[currentSlide].classList.add('active');
+            document.getElementById('slideNumber').textContent = `${currentSlide + 1} / ${totalSlides}`;
+
+            // Show mini logo on all slides except the first
+            if (currentSlide === 0) {
+                miniLogo.style.display = 'none';
+            } else {
+                miniLogo.style.display = 'flex';
+            }
+        }
+
+        function nextSlide() {
+            showSlide(currentSlide + 1);
+        }
+
+        function previousSlide() {
+            showSlide(currentSlide - 1);
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                previousSlide();
+            }
+        });
+
+        // Touch navigation for mobile
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        });
+
+        document.addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            if (touchStartX - touchEndX > 50) {
+                nextSlide();
+            } else if (touchEndX - touchStartX > 50) {
+                previousSlide();
+            }
+        });
+    </script>
+</body>
+</html>

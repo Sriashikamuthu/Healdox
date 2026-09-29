@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+.claude/
+.bolt/
+
+# Build output
+dist/
+build/
+
+# Android / Gradle
+.gradle/
+local.properties
+
+# Uploaded user files
+uploads/
+server/uploads/
+
+# Database files
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.backup
+*.backup-*
+*.bak
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.dbserver/test-password.js
