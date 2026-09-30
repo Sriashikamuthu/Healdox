@@ -1161,7 +1161,44 @@ app.post("/conversation", async (req, res) => {
   }
 
 });
+app.get("/connections/status/:userId/:targetUserId", async (req, res) => {
+  try {
+    const { userId, targetUserId } = req.params;
 
+    const result = await pool.query(
+      `
+      SELECT id, sender_id, receiver_id, status
+      FROM connections
+      WHERE
+        (sender_id = $1 AND receiver_id = $2)
+        OR
+        (sender_id = $2 AND receiver_id = $1)
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+      [userId, targetUserId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        status: "none",
+        connection_id: null
+      });
+    }
+
+    res.json({
+      status: result.rows[0].status,
+      connection_id: result.rows[0].id
+    });
+
+  } catch (err) {
+    console.error("Connection status error:", err);
+
+    res.status(500).json({
+      error: "Failed to check connection status"
+    });
+  }
+});
 /* =========================
    SEND CONNECTION REQUEST
 ========================= */
@@ -1761,13 +1798,50 @@ app.post("/comments", async (req, res) => {
 /* =========================
    GET COMMENTS
 ========================= */
+app.get("/physicians", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        id,
+        username,
+        full_name,
+        avatar_url,
+        bio,
+        country,
+        state,
+        city,
+        role,
+        is_verified,
+        license_number,
+        specialty,
+        specialties,
+        languages_spoken,
+        years_of_experience,
+        consultation_fee,
+        available_for_online_consultation,
+        institution,
+        medicine_system
+      FROM profiles
+      WHERE role = 'physician'
+        AND is_verified = true
+      ORDER BY full_name ASC
+    `);
 
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error("Fetch physicians error:", error);
+
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
 app.get("/comments/:discussionId", async (req, res) => {
 
   try {
 
     const { discussionId } = req.params;
-    const { user_id } = req.query;
 
     console.log("Fetching comments for:", discussionId);
 
@@ -1779,21 +1853,14 @@ app.get("/comments/:discussionId", async (req, res) => {
         dc.user_id,
         dc.parent_id,
         dc.created_at,
-        u.full_name,
-        COALESCE(dc.helpful_count, 0) AS helpful_count,
-        CASE WHEN $2::uuid IS NOT NULL AND EXISTS (
-          SELECT 1 FROM comment_reactions cr
-          WHERE cr.comment_id = dc.id
-            AND cr.user_id = $2::uuid
-            AND cr.reaction_type = 'helpful'
-        ) THEN true ELSE false END AS user_has_reacted
+        u.full_name
       FROM discussion_comments dc
       LEFT JOIN users u 
         ON dc.user_id = u.id
       WHERE dc.discussion_id = $1
       ORDER BY dc.created_at ASC
       `,
-      [discussionId, user_id || null]
+      [discussionId]
     );
 
     console.log("Comments fetched:", result.rows);
@@ -1816,94 +1883,82 @@ app.get("/comments/:discussionId", async (req, res) => {
   }
 
 });
+/* =========================
+   CREATE CONSULTATION REQUEST
+========================= */
 
-app.post("/comments/helpful", async (req, res) => {
-
-  const client = await pool.connect();
-
+app.post("/consultation-requests", async (req, res) => {
   try {
+    const {
+      member_id,
+      professional_id,
+      request_type,
+      message
+    } = req.body;
 
-    const { comment_id, user_id } = req.body;
-
-    if (!comment_id || !user_id) {
-      client.release();
+    if (!member_id || !professional_id || !message) {
       return res.status(400).json({
-        error: "comment_id and user_id are required"
+        error: "Member, physician and message are required"
       });
     }
 
-    await client.query("BEGIN");
-
-    const existing = await client.query(
+    const result = await pool.query(
       `
-      SELECT id FROM comment_reactions
-      WHERE comment_id = $1
-        AND user_id = $2
-        AND reaction_type = 'helpful'
+      INSERT INTO consultation_requests
+      (
+        member_id,
+        professional_id,
+        request_type,
+        message,
+        status
+      )
+      VALUES ($1, $2, $3, $4, 'pending')
+      RETURNING *
       `,
-      [comment_id, user_id]
+      [
+        member_id,
+        professional_id,
+        request_type || "advice",
+        message
+      ]
     );
 
-    let reacted;
+    console.log("Consultation request created:", result.rows[0]);
 
-    if (existing.rows.length > 0) {
+    res.json(result.rows[0]);
 
-      await client.query(
-        `
-        DELETE FROM comment_reactions
-        WHERE comment_id = $1
-          AND user_id = $2
-          AND reaction_type = 'helpful'
-        `,
-        [comment_id, user_id]
-      );
+  } catch (error) {
 
-      await client.query(
-        `
-        UPDATE discussion_comments
-        SET helpful_count = GREATEST(COALESCE(helpful_count,0) - 1, 0)
-        WHERE id = $1
-        `,
-        [comment_id]
-      );
+    console.error("Consultation request error:", error);
 
-      reacted = false;
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+app.post("/comments/helpful", async (req, res) => {
 
-    } else {
+  try {
 
-      await client.query(
-        `
-        INSERT INTO comment_reactions (id, comment_id, user_id, reaction_type)
-        VALUES (gen_random_uuid(), $1, $2, 'helpful')
-        `,
-        [comment_id, user_id]
-      );
+    const { comment_id } = req.body;
 
-      await client.query(
-        `
-        UPDATE discussion_comments
-        SET helpful_count = COALESCE(helpful_count,0) + 1
-        WHERE id = $1
-        `,
-        [comment_id]
-      );
-
-      reacted = true;
-
-    }
-
-    await client.query("COMMIT");
+    await pool.query(
+      `
+      UPDATE discussion_comments
+      SET helpful_count =
+          COALESCE(helpful_count,0) + 1
+      WHERE id = $1
+      `,
+      [comment_id]
+    );
 
     res.json({
-      success: true,
-      reacted
+      success: true
     });
 
   }
 
   catch (err) {
-
-    await client.query("ROLLBACK");
 
     console.error(
       "Helpful error:",
@@ -1914,10 +1969,6 @@ app.post("/comments/helpful", async (req, res) => {
       error: "Failed to update helpful"
     });
 
-  }
-
-  finally {
-    client.release();
   }
 
 });

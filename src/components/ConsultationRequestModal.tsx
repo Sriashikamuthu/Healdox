@@ -65,47 +65,67 @@ export function ConsultationRequestModal({
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!message.trim()) {
-      setError('Please provide details about your consultation request');
-      return;
-    }
+  e.preventDefault();
 
-    setLoading(true);
-    setError('');
+  if (!message.trim()) {
+    setError('Please provide details about your consultation request');
+    return;
+  }
 
-    try {
-      const { data: consultation, error: consultationError } = await supabase
-        .from('consultation_requests')
-        .insert({
-          member_id: user?.id,
+  if (!user?.id) {
+    setError('Please sign in to send a consultation request');
+    return;
+  }
+
+  setLoading(true);
+  setError('');
+
+  try {
+    const response = await fetch(
+      "http://localhost:5000/consultation-requests",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          member_id: user.id,
           professional_id: physicianId,
-          message,
-          status: 'pending',
-        })
-        .select()
-        .single();
-
-      if (consultationError) throw consultationError;
-
-      if (medicalRecords.length > 0 && consultation) {
-        await uploadMedicalRecords(consultation.id);
+          request_type: requestType,
+          message: message.trim(),
+        }),
       }
+    );
 
-      setSuccess(true);
-      setTimeout(() => {
-        onClose();
-        setSuccess(false);
-        setMessage('');
-        setMedicalRecords([]);
-        setRequestType('advice');
-      }, 2000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to send consultation request');
-    } finally {
-      setLoading(false);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Failed to send consultation request"
+      );
     }
-  };
+
+    console.log("Consultation request created:", data);
+
+    setSuccess(true);
+
+    setTimeout(() => {
+      onClose();
+      setSuccess(false);
+      setMessage('');
+      setMedicalRecords([]);
+      setRequestType('advice');
+    }, 2000);
+
+  } catch (err: any) {
+    console.error("Consultation request error:", err);
+    setError(
+      err.message || "Failed to send consultation request"
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">

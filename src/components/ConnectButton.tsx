@@ -10,7 +10,12 @@ interface ConnectButtonProps {
 
 export function ConnectButton({ userId, userName }: ConnectButtonProps) {
   const { user } = useAuth();
-  const [connectionStatus, setConnectionStatus] = useState<'none' | 'pending' | 'accepted' | 'loading'>('none');
+
+  const [connectionStatus, setConnectionStatus] = useState<
+    'none' | 'pending' | 'accepted' | 'loading'
+  >('none');
+
+  const [connectionId, setConnectionId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,21 +26,23 @@ export function ConnectButton({ userId, userName }: ConnectButtonProps) {
 
   const checkConnectionStatus = async () => {
     try {
-      const { data, error } = await supabase
-        .from('user_connections')
-        .select('*')
-        .or(`and(requester_id.eq.${user?.id},receiver_id.eq.${userId}),and(requester_id.eq.${userId},receiver_id.eq.${user?.id})`)
-        .single();
+      setLoading(true);
 
-      if (error && error.code !== 'PGRST116') throw error;
+      const response = await fetch(
+        `http://localhost:5000/connections/status/${user?.id}/${userId}`
+      );
 
-      if (data) {
-        setConnectionStatus(data.status);
-      } else {
-        setConnectionStatus('none');
+      if (!response.ok) {
+        throw new Error('Failed to check connection status');
       }
+
+      const data = await response.json();
+
+      setConnectionStatus(data.status || 'none');
+      setConnectionId(data.connection_id || null);
     } catch (error) {
       console.error('Error checking connection status:', error);
+      setConnectionStatus('none');
     } finally {
       setLoading(false);
     }
@@ -50,73 +57,117 @@ export function ConnectButton({ userId, userName }: ConnectButtonProps) {
     setLoading(true);
 
     try {
-      const { error } = await supabase
-        .from('user_connections')
-        .insert({
-          requester_id: user.id,
-          receiver_id: userId,
-          status: 'pending',
-        });
+      const response = await fetch(
+        'http://localhost:5000/connection/send',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sender_id: user.id,
+            receiver_id: userId,
+          }),
+        }
+      );
 
-      if (error) throw error;
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send connection request');
+      }
 
       setConnectionStatus('pending');
+
       alert(`Connection request sent to ${userName}`);
     } catch (error: any) {
       console.error('Error sending connection request:', error);
-      alert('Failed to send connection request');
+      alert(error.message || 'Failed to send connection request');
     } finally {
       setLoading(false);
     }
   };
 
   const handleAccept = async () => {
-    setLoading(true);
+  if (!connectionId) {
+    alert('Connection not found');
+    return;
+  }
 
-    try {
-      const { error } = await supabase
-        .from('user_connections')
-        .update({ status: 'accepted' })
-        .eq('requester_id', userId)
-        .eq('receiver_id', user?.id);
+  setLoading(true);
 
-      if (error) throw error;
+  try {
+    const response = await fetch(
+      'http://localhost:5000/connections/accept',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          connection_id: connectionId,
+        }),
+      }
+    );
 
-      setConnectionStatus('accepted');
-      alert(`You are now connected with ${userName}`);
-    } catch (error) {
-      console.error('Error accepting connection:', error);
-      alert('Failed to accept connection');
-    } finally {
-      setLoading(false);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to accept connection');
     }
-  };
+
+    setConnectionStatus('accepted');
+
+    alert(`You are now connected with ${userName}`);
+  } catch (error: any) {
+    console.error('Error accepting connection:', error);
+    alert(error.message || 'Failed to accept connection');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleRemove = async () => {
-    if (!confirm(`Remove connection with ${userName}?`)) return;
+  if (!connectionId) {
+    alert('Connection not found');
+    return;
+  }
 
-    setLoading(true);
+  if (!confirm(`Remove connection with ${userName}?`)) {
+    return;
+  }
 
-    try {
-      const { error } = await supabase
-        .from('user_connections')
-        .delete()
-        .or(`and(requester_id.eq.${user?.id},receiver_id.eq.${userId}),and(requester_id.eq.${userId},receiver_id.eq.${user?.id})`);
+  setLoading(true);
 
-      if (error) throw error;
+  try {
+    const response = await fetch(
+      `http://localhost:5000/connections/remove/${connectionId}`,
+      {
+        method: 'DELETE',
+      }
+    );
 
-      setConnectionStatus('none');
-    } catch (error) {
-      console.error('Error removing connection:', error);
-      alert('Failed to remove connection');
-    } finally {
-      setLoading(false);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to remove connection');
     }
-  };
 
-  if (!user || user.id === userId) return null;
+    setConnectionStatus('none');
+    setConnectionId(null);
 
-  if (loading && connectionStatus === 'loading') {
+  } catch (error: any) {
+    console.error('Error removing connection:', error);
+    alert(error.message || 'Failed to remove connection');
+  } finally {
+    setLoading(false);
+  }
+};
+  if (!user || user.id === userId) {
+    return null;
+  }
+
+  if (loading) {
     return (
       <button
         disabled
@@ -165,4 +216,4 @@ export function ConnectButton({ userId, userName }: ConnectButtonProps) {
       <span>Connect</span>
     </button>
   );
-}
+}
