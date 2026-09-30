@@ -13,12 +13,13 @@ interface AuthContextType {
   user: User | null;
   setUser: React.Dispatch<React.SetStateAction<User | null>>; // ✅ ADD THIS
   loading: boolean;
-  signUp: (
-    email: string,
-    password: string,
-    username: string,
-    fullName: string
-  ) => Promise<{ error: Error | null }>;
+signUp: (
+  email: string,
+  password: string,
+  username: string,
+  fullName: string,
+  role: string
+) => Promise<{ error: Error | null }>;
   signIn: (
     email: string,
     password: string
@@ -65,7 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     username: string,
-    fullName: string
+    fullName: string,
+    role: string
   ) => {
     try {
       const res = await fetch("http://localhost:5000/auth/signup", {
@@ -78,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
           username,
           fullName,
+          role,
         }),
       });
 

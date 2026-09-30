@@ -60,23 +60,23 @@ export function PhysicianList() {
   }, [physicians]);
 
   const fetchPhysicians = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'physician')
-        .eq('is_verified', true)
-        .order('full_name');
+  try {
+    const response = await fetch("http://localhost:5000/physicians");
 
-      if (error) throw error;
-      setPhysicians(data || []);
-      setFilteredPhysicians(data || []);
-    } catch (error) {
-      console.error('Error fetching physicians:', error);
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      throw new Error("Failed to fetch physicians");
     }
-  };
+
+    const data = await response.json();
+
+    setPhysicians(data || []);
+    setFilteredPhysicians(data || []);
+  } catch (error) {
+    console.error("Error fetching physicians:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const extractFilterOptions = () => {
     const countries = new Set<string>();
