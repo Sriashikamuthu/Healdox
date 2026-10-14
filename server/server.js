@@ -17,8 +17,8 @@ import notificationsRoutes from "./routes/notifications.js";
 import discussionsRoutes from "./routes/discussions.js";
 import subscriptionPlansRoutes from "./routes/subscription-plans.js";
 import subscriptionsRoutes from "./routes/subscriptions.js";
-
-
+import { authenticateToken } from "./middleware/authMiddleware.js";
+import jwt from "jsonwebtoken";
 dotenv.config();
 
 const app = express();
@@ -120,7 +120,7 @@ app.get("/posts", async (req, res) => {
   try {
 
     const result = await pool.query(`
-      SELECT 
+      SELECT
         posts.*,
         users.username,
         COUNT(DISTINCT likes.id) AS like_count,
@@ -231,7 +231,7 @@ app.get("/posts/:id/comments", async (req, res) => {
     const postId = req.params.id;
 
     const result = await pool.query(
-      `SELECT 
+      `SELECT
          c.id,
          c.comment,
          c.created_at,
@@ -283,7 +283,7 @@ app.delete("/comments/:id", async (req, res) => {
     const countResult =
       await pool.query(
         `
-        SELECT COUNT(*) 
+        SELECT COUNT(*)
         FROM discussion_comments
         WHERE discussion_id = $1
         `,
@@ -459,43 +459,71 @@ app.post("/posts/:postId/comments", async (req, res) => {
 
 });
 
+
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({
+        error: "Email and password are required",
+      });
+    }
+
     const result = await pool.query(
-      "SELECT id, username, email, password_hash, avatar_url FROM users WHERE email = $1",
+      `SELECT id, username, email, password_hash,
+              avatar_url, full_name, role
+       FROM users
+       WHERE email = $1`,
       [email]
     );
 
     const user = result.rows[0];
 
     if (!user) {
-      return res.status(400).json({ error: "User not found" });
+      return res.status(401).json({
+        error: "Invalid login credentials",
+      });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password_hash);
+    const isMatch = await bcrypt.compare(
+      password,
+      user.password_hash
+    );
 
     if (!isMatch) {
-      return res.status(400).json({ error: "Invalid password" });
+      return res.status(401).json({
+        error: "Invalid login credentials",
+      });
     }
 
-    // ✅ IMPORTANT FIX
-    res.json({
+    if (!process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET is not configured");
+    }
+
+    const token = jwt.sign(
+      { id: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: "2h" }
+    );
+
+    return res.json({
       message: "Login success",
+      token,
       user: {
         id: user.id,
         email: user.email,
         username: user.username,
-        avatar_url: user.avatar_url,
+        avatar_url: user.avatar_url || "",
         fullName: user.full_name || "",
-        role: user.role || "patient"
-      }
+        role: user.role || "patient",
+      },
     });
-
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Login failed" });
+    console.error("Login error:", err.message);
+    return res.status(500).json({
+      error: "Login failed",
+    });
   }
 });
 
@@ -541,6 +569,25 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+const medicalStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, "private-medical-records"));
+  },
+  filename: (req, file, cb) => {
+    const safeName = `${Date.now()}-${crypto.randomUUID()}`;
+    const extension = path.extname(file.originalname).toLowerCase();
+    cb(null, `${safeName}${extension}`);
+  },
+});
+
+const medicalUpload = multer({
+  storage: medicalStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+    files: 5,
+  },
+});
+
 app.post("/upload-profile", upload.single("avatar"), async (req, res) => {
   try {
     const userId = req.body.user_id;
@@ -566,6 +613,162 @@ app.post("/upload-profile", upload.single("avatar"), async (req, res) => {
     res.status(500).json({ error: "Upload failed" });
   }
 });
+// =========================
+// MEDICAL RECORD UPLOAD
+// =========================
+
+app.post(
+  "/upload-medical-record",
+  authenticateToken,
+  medicalUpload.array("medical_records", 5),
+  async (req, res) => {
+    const client = await pool.connect();
+    const savedFilePaths = [];
+
+    try {
+      const userId = req.user.id;
+      const consultationId = req.body.consultation_id;
+
+      if (!userId || !consultationId) {
+        return res.status(400).json({
+          error: "User ID and consultation ID are required",
+        });
+      }
+
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({
+          error: "No medical records uploaded",
+        });
+      }
+
+      // Confirm this consultation belongs to this patient.
+      const consultation = await client.query(
+        `SELECT id
+         FROM consultation_requests
+         WHERE id = $1 AND member_id = $2`,
+        [consultationId, userId]
+      );
+
+      if (consultation.rows.length === 0) {
+        return res.status(403).json({
+          error: "Consultation not found for this patient",
+        });
+      }
+
+      await client.query("BEGIN");
+
+      const uploadedFiles = [];
+
+      for (const file of req.files) {
+        const fileUrl = `/medical-records/${file.filename}/download`;
+
+        const result = await client.query(
+          `INSERT INTO medical_records
+            (record_type, record_name, record_date, description,
+             record_url, consultation_id)
+           VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)
+           RETURNING id, record_name, record_url, consultation_id`,
+          [
+            "lab_report",
+            file.originalname,
+            "Uploaded for consultation",
+            fileUrl,
+            consultationId,
+          ]
+        );
+
+        savedFilePaths.push(file.path);
+        uploadedFiles.push(result.rows[0]);
+      }
+
+      await client.query("COMMIT");
+
+      console.log("Medical records saved:", uploadedFiles);
+
+      res.json({
+        message: "Medical records uploaded and saved successfully",
+        files: uploadedFiles,
+      });
+    } catch (err) {
+      await client.query("ROLLBACK");
+
+      console.error("MEDICAL RECORD UPLOAD ERROR:", err);
+
+      // Remove files if their database transaction fails.
+      const fs = await import("fs/promises");
+      await Promise.all(
+        savedFilePaths.map((filePath) =>
+          fs.unlink(filePath).catch(() => {})
+        )
+      );
+
+      res.status(500).json({
+        error: "Medical record upload failed",
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+
+app.get(
+  "/medical-records/:id/download",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const recordId = req.params.id;
+      const userId = req.user.id;
+
+      const result = await pool.query(
+        `SELECT mr.record_name, mr.record_url
+         FROM medical_records mr
+         JOIN consultation_requests cr
+           ON cr.id = mr.consultation_id
+         WHERE mr.id = $1
+           AND (
+             cr.member_id = $2
+             OR cr.professional_id = $2
+           )`,
+        [recordId, userId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          error: "Medical record not found or access denied",
+        });
+      }
+
+      const record = result.rows[0];
+
+const urlParts = record.record_url.split("/").filter(Boolean);
+const filename = path.basename(urlParts[1] || "");
+
+      const filePath = path.join(
+        __dirname,
+        "private-medical-records",
+        filename
+      );
+
+      const fs = await import("fs/promises");
+
+      try {
+        await fs.access(filePath);
+      } catch {
+        return res.status(404).json({
+          error: "Medical record file not found",
+        });
+      }
+
+      return res.download(filePath, record.record_name);
+    } catch (err) {
+      console.error("MEDICAL RECORD DOWNLOAD ERROR:", err.message);
+      return res.status(500).json({
+        error: "Unable to download medical record",
+      });
+    }
+  }
+);
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -655,10 +858,10 @@ app.post("/chat", async (req, res) => {
       botReplyText =
         `We provide the following services:
 
-• Doctor consultations  
-• Medical record uploads  
-• Symptom discussions  
-• Counselling sessions  
+• Doctor consultations
+• Medical record uploads
+• Symptom discussions
+• Counselling sessions
 • Physician connections`;
 
     }
@@ -674,11 +877,11 @@ app.post("/chat", async (req, res) => {
       botReplyText =
         `Common symptoms of fever include:
 
-• High temperature  
-• Sweating  
-• Chills  
-• Headache  
-• Weakness  
+• High temperature
+• Sweating
+• Chills
+• Headache
+• Weakness
 
 If fever continues for more than 2 days, please consult a doctor.`;
 
@@ -695,9 +898,9 @@ If fever continues for more than 2 days, please consult a doctor.`;
       botReplyText =
         `Headache may be caused by:
 
-• Stress  
-• Dehydration  
-• Lack of sleep  
+• Stress
+• Dehydration
+• Lack of sleep
 
 Drink water and rest. If persistent, consult a doctor.`;
 
@@ -781,7 +984,7 @@ app.get("/connections/pending/:userId", async (req, res) => {
 
     const result = await pool.query(
 
-      `SELECT 
+      `SELECT
          c.id,
          c.sender_id,
          c.receiver_id,
@@ -868,7 +1071,7 @@ app.get("/connections/accepted/:userId", async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT 
+      SELECT
         c.id,
         u.id as user_id,
         u.username,
@@ -1013,7 +1216,7 @@ app.get("/profile/:id", async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT 
+      SELECT
         id,
         username,
         email,
@@ -1102,14 +1305,14 @@ app.get("/chats/:conversation_id", async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT 
+      SELECT
         c.*,
         u.username,
         u.avatar_url
       FROM chats c
       LEFT JOIN users u
         ON c.sender_id = u.id
-      WHERE 
+      WHERE
         c.conversation_id = $1
         AND c.is_bot = false   -- ⭐ IMPORTANT
       ORDER BY c.created_at ASC;
@@ -1463,7 +1666,7 @@ app.get(
       const result =
         await pool.query(
           `
-          SELECT 
+          SELECT
             rc.*,
             u.username
           FROM review_comments rc
@@ -1847,7 +2050,7 @@ app.get("/comments/:discussionId", async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT 
+      SELECT
         dc.id,
         dc.comment,
         dc.user_id,
@@ -1855,7 +2058,7 @@ app.get("/comments/:discussionId", async (req, res) => {
         dc.created_at,
         u.full_name
       FROM discussion_comments dc
-      LEFT JOIN users u 
+      LEFT JOIN users u
         ON dc.user_id = u.id
       WHERE dc.discussion_id = $1
       ORDER BY dc.created_at ASC
@@ -1867,7 +2070,7 @@ app.get("/comments/:discussionId", async (req, res) => {
 
     res.json(result.rows);
 
-  } 
+  }
 
   catch (err) {
 

@@ -4,7 +4,7 @@ import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import pool from "../db.js";
 import dotenv from "dotenv";
-
+import jwt from "jsonwebtoken";
 const router = express.Router();
 
 /* =========================
@@ -47,67 +47,73 @@ router.post("/signup", async (req, res) => {
 /* =========================
    LOGIN
 ========================= */
+
+
 router.post("/login", async (req, res) => {
   try {
-
     const { email, password } = req.body;
 
-    console.log("Login attempt:", email);
+    if (!email || !password) {
+      return res.status(400).json({
+        error: "Email and password are required",
+      });
+    }
 
     const result = await pool.query(
-      "SELECT * FROM users WHERE email=$1",
+      `SELECT id, email, username, full_name, role, password_hash, avatar_url
+       FROM users
+       WHERE email = $1`,
       [email]
     );
 
     if (result.rows.length === 0) {
-
-      console.log("User not found");
-
-      return res.status(400).json({
-        error: "Invalid login credentials"
+      return res.status(401).json({
+        error: "Invalid login credentials",
       });
-
     }
 
     const user = result.rows[0];
-
-    console.log("DB password hash:", user.password_hash);
-
-    const match = await bcrypt.compare(
+    const passwordMatches = await bcrypt.compare(
       password,
       user.password_hash
     );
 
-    console.log("Password match:", match);
-
-    if (!match) {
-
-      return res.status(400).json({
-        error: "Invalid login credentials"
+    if (!passwordMatches) {
+      return res.status(401).json({
+        error: "Invalid login credentials",
       });
-
     }
 
-    /* FIXED RESPONSE */
-    res.json({
+    if (!process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET is not configured");
+    }
+
+    const token = jwt.sign(
+      { id: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: "2h" }
+    );
+
+    return res.json({
       message: "Login success",
+      token,
       user: {
         id: user.id,
         email: user.email,
-        username: user.username
-      }
+        username: user.username,
+        avatar_url: user.avatar_url || "",
+        fullName: user.full_name || "",
+        role: user.role || "patient",
+      },
     });
-
   } catch (err) {
-
-    console.error("Login error:", err);
-
-    res.status(500).json({
-      error: "Server error"
+    console.error("Login error:", err.message);
+    return res.status(500).json({
+      error: "Login failed",
     });
-
   }
 });
+
 /* =========================
    FORGOT PASSWORD
 ========================= */

@@ -38,31 +38,42 @@ export function ConsultationRequestModal({
     setError('');
   };
 
-  const uploadMedicalRecords = async (consultationId: string): Promise<string[]> => {
-    const uploadedUrls: string[] = [];
+  const uploadMedicalRecords = async (
+  consultationId: string
+): Promise<string[]> => {
+  if (medicalRecords.length === 0) {
+    return [];
+  }
 
-    for (const file of medicalRecords) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user?.id}/${consultationId}/${Date.now()}.${fileExt}`;
+  const formData = new FormData();
 
-      const { error: uploadError } = await supabase.storage
-        .from('medical-records')
-        .upload(fileName, file);
+  formData.append("user_id", user?.id || "");
+  formData.append("consultation_id", consultationId);
 
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        continue;
-      }
+  medicalRecords.forEach((file) => {
+    formData.append("medical_records", file);
+  });
 
-      const { data } = supabase.storage
-        .from('medical-records')
-        .getPublicUrl(fileName);
+  const response = await fetch("http://localhost:5000/upload-medical-record", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${localStorage.getItem("token")}`,
+  },
+  body: formData,
+});
 
-      uploadedUrls.push(data.publicUrl);
-    }
+  const data = await response.json();
 
-    return uploadedUrls;
-  };
+  if (!response.ok) {
+    throw new Error(
+      data.error || "Failed to upload medical records"
+    );
+  }
+
+  return data.files.map(
+    (file: { file_url: string }) => file.file_url
+  );
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -107,7 +118,23 @@ export function ConsultationRequestModal({
 
     console.log("Consultation request created:", data);
 
-    setSuccess(true);
+if (medicalRecords.length > 0) {
+  try {
+    const uploadedUrls = await uploadMedicalRecords(data.id);
+
+    console.log("Medical records uploaded:", uploadedUrls);
+  } catch (uploadError: any) {
+    console.error("Medical record upload error:", uploadError);
+
+    setError(
+      uploadError.message || "Failed to upload medical records"
+    );
+
+    return;
+  }
+}
+
+setSuccess(true);
 
     setTimeout(() => {
       onClose();

@@ -137,14 +137,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(userData);
 
-      localStorage.setItem(
-        "user",
-        JSON.stringify(userData)
-      );
+      setUser(userData);
 
-      console.log("LOGIN USER:", userData);
+localStorage.setItem(
+  "user",
+  JSON.stringify(userData)
+);
 
-      return { error: null };
+localStorage.setItem("token", data.token);
+
+console.log("LOGIN USER:", userData);
+
+return { error: null };
 
     } catch (error) {
 

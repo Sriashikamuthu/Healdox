@@ -45,4 +45,9 @@ server/uploads/
 
 # OS
 .DS_Store
-Thumbs.dbserver/test-password.js
+Thumbs.db
+
+# Private medical records and test files
+server/private-medical-records/
+server/test-password.js
+server/check-password.js
