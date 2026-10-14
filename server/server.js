@@ -1017,7 +1017,12 @@ app.get("/profile/:id", async (req, res) => {
         id,
         username,
         email,
-        avatar_url
+        avatar_url,
+        full_name,
+        phone,
+        date_of_birth,
+        gender,
+        role
       FROM users
       WHERE id = $1
       `,
@@ -1032,6 +1037,60 @@ app.get("/profile/:id", async (req, res) => {
 
     res.status(500).json({
       error: "Profile fetch failed"
+    });
+
+  }
+
+});
+
+/* =========================
+   UPDATE PROFILE (PERSONAL INFO)
+========================= */
+
+app.put("/profile/:id", async (req, res) => {
+
+  try {
+
+    const { id } = req.params;
+    const { full_name, phone, date_of_birth, gender } = req.body;
+
+    const result = await pool.query(
+      `
+      UPDATE users
+      SET
+        full_name = COALESCE($1, full_name),
+        phone = COALESCE($2, phone),
+        date_of_birth = COALESCE($3, date_of_birth),
+        gender = COALESCE($4, gender)
+      WHERE id = $5
+      RETURNING
+        id,
+        username,
+        email,
+        avatar_url,
+        full_name,
+        phone,
+        date_of_birth,
+        gender,
+        role
+      `,
+      [full_name, phone, date_of_birth || null, gender, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "User not found"
+      });
+    }
+
+    res.json(result.rows[0]);
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      error: "Profile update failed"
     });
 
   }
@@ -1375,6 +1434,73 @@ app.post("/add-dependent", async (req, res) => {
 
   }
 
+});
+// UPDATE DEPENDENT
+app.put("/update-dependent/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      full_name,
+      date_of_birth,
+      gender,
+      relationship,
+      blood_group,
+      allergies,
+      chronic_conditions,
+      current_medications,
+      notes,
+      caregiver_name,
+      caregiver_relationship
+    } = req.body;
+
+    const result = await pool.query(
+      `UPDATE dependents
+       SET
+         full_name = $1,
+         date_of_birth = $2,
+         gender = $3,
+         relationship = $4,
+         blood_group = $5,
+         allergies = $6,
+         chronic_conditions = $7,
+         current_medications = $8,
+         notes = $9,
+         caregiver_name = $10,
+         caregiver_relationship = $11
+       WHERE id = $12
+       RETURNING *`,
+      [
+        full_name,
+        date_of_birth,
+        gender,
+        relationship,
+        blood_group,
+        allergies,
+        chronic_conditions,
+        current_medications,
+        notes,
+        caregiver_name,
+        caregiver_relationship,
+        id
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Dependent not found"
+      });
+    }
+
+    res.json(result.rows[0]);
+
+  } catch (err) {
+    console.error("Update dependent error:", err);
+
+    res.status(500).json({
+      error: "Failed to update dependent"
+    });
+  }
 });
 
 // LIKE / UNLIKE REVIEW
@@ -1936,6 +2062,194 @@ app.post("/consultation-requests", async (req, res) => {
     });
   }
 });
+
+/* =========================
+   GET CONSULTATION REQUESTS FOR A PATIENT
+========================= */
+
+app.get("/consultation-requests/:userId", async (req, res) => {
+
+  try {
+
+    const { userId } = req.params;
+
+    const result = await pool.query(
+      `
+      SELECT
+        cr.*,
+        u.username AS provider_username,
+        u.full_name AS provider_full_name,
+        u.role AS provider_role
+      FROM consultation_requests cr
+      LEFT JOIN users u ON u.id = cr.professional_id
+      WHERE cr.member_id = $1
+      ORDER BY cr.created_at DESC
+      `,
+      [userId]
+    );
+
+    const rows = result.rows.map((row) => {
+
+      const {
+        provider_username,
+        provider_full_name,
+        provider_role,
+        ...rest
+      } = row;
+
+      const provider = {
+        id: row.professional_id,
+        username: provider_username,
+        full_name: provider_full_name,
+        role: provider_role
+      };
+
+      // Both keys populated for compatibility with existing frontend components
+      return {
+        ...rest,
+        provider,
+        professional: provider
+      };
+
+    });
+
+    res.json(rows);
+
+  } catch (err) {
+
+    console.error("Fetch consultation requests error:", err);
+
+    res.status(500).json({
+      error: "Failed to load consultation requests"
+    });
+
+  }
+
+});
+
+/* =========================
+   GET APPOINTMENTS FOR A PATIENT
+========================= */
+
+app.get("/appointments/:userId", async (req, res) => {
+
+  try {
+
+    const { userId } = req.params;
+
+    const result = await pool.query(
+      `
+      SELECT
+        a.*,
+        u.username AS provider_username,
+        u.full_name AS provider_full_name,
+        u.role AS provider_role
+      FROM appointments a
+      LEFT JOIN users u ON u.id = a.provider_id
+      WHERE a.patient_id = $1
+      ORDER BY a.scheduled_date DESC
+      `,
+      [userId]
+    );
+
+    const rows = result.rows.map((row) => {
+
+      const {
+        provider_username,
+        provider_full_name,
+        provider_role,
+        ...rest
+      } = row;
+
+      return {
+        ...rest,
+        provider: {
+          id: row.provider_id,
+          username: provider_username,
+          full_name: provider_full_name,
+          role: provider_role
+        }
+      };
+
+    });
+
+    res.json(rows);
+
+  } catch (err) {
+
+    console.error("Fetch appointments error:", err);
+
+    res.status(500).json({
+      error: "Failed to load appointments"
+    });
+
+  }
+
+});
+
+/* =========================
+   GET COUNSELLING SESSIONS FOR A PATIENT
+   (counselling requests are consultation_requests
+   with request_type = 'counselling')
+========================= */
+
+app.get("/counselling-sessions/:userId", async (req, res) => {
+
+  try {
+
+    const { userId } = req.params;
+
+    const result = await pool.query(
+      `
+      SELECT
+        cr.*,
+        u.username AS provider_username,
+        u.full_name AS provider_full_name,
+        u.role AS provider_role
+      FROM consultation_requests cr
+      LEFT JOIN users u ON u.id = cr.professional_id
+      WHERE cr.member_id = $1
+        AND cr.request_type = 'counselling'
+      ORDER BY cr.created_at DESC
+      `,
+      [userId]
+    );
+
+    const rows = result.rows.map((row) => {
+
+      const {
+        provider_username,
+        provider_full_name,
+        provider_role,
+        ...rest
+      } = row;
+
+      return {
+        ...rest,
+        provider: {
+          id: row.professional_id,
+          username: provider_username,
+          full_name: provider_full_name,
+          role: provider_role
+        }
+      };
+
+    });
+
+    res.json(rows);
+
+  } catch (err) {
+
+    console.error("Fetch counselling sessions error:", err);
+
+    res.status(500).json({
+      error: "Failed to load counselling sessions"
+    });
+
+  }
+
+});
+
 app.post("/comments/helpful", async (req, res) => {
 
   try {

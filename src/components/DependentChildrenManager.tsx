@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, User, Calendar, Stethoscope, FileText, AlertCircle, Activity } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { AddDependentModal } from './AddDependentModal';
+import { EditDependentModal } from './EditDependentModal';
 import { ChildMedicalRecordsModal } from './ChildMedicalRecordsModal';
 import { PediatricConsultationRequestModal } from './PediatricConsultationRequestModal';
 
@@ -35,6 +36,7 @@ export function DependentChildrenManager() {
   const [selectedChild, setSelectedChild] = useState<DependentChild | null>(null);
   const [healthIssues, setHealthIssues] = useState<ChildHealthIssue[]>([]);
   const [addChildModalOpen, setAddChildModalOpen] = useState(false);
+  const [editChildModalOpen, setEditChildModalOpen] = useState(false);
   const [medicalRecordsModalOpen, setMedicalRecordsModalOpen] = useState(false);
   const [consultationModalOpen, setConsultationModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -222,11 +224,20 @@ export function DependentChildrenManager() {
                         {calculateAge(selectedChild.date_of_birth)} • {selectedChild.gender.charAt(0).toUpperCase() + selectedChild.gender.slice(1)}
                       </p>
                     </div>
-                    {selectedChild.blood_group && (
-                      <div className="bg-white px-3 py-1 rounded-full text-sm font-medium text-gray-700 border border-gray-200">
-                        {selectedChild.blood_group}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+    {selectedChild.blood_group && (
+      <div className="bg-white px-3 py-1 rounded-full text-sm font-medium text-gray-700 border border-gray-200">
+        {selectedChild.blood_group}
+      </div>
+    )}
+
+    <button
+      onClick={() => setEditChildModalOpen(true)}
+      className="px-3 py-1 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+    >
+      Edit
+    </button>
+  </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
@@ -322,6 +333,14 @@ export function DependentChildrenManager() {
         onClose={() => setAddChildModalOpen(false)}
         onSuccess={fetchChildren}
       />
+      {selectedChild && (
+       <EditDependentModal
+          isOpen={editChildModalOpen}
+          onClose={() => setEditChildModalOpen(false)}
+          onSuccess={fetchChildren}
+          child={selectedChild}
+       />
+      )}
 
       {selectedChild && (
         <>

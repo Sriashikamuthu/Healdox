@@ -11,36 +11,64 @@ const router = express.Router();
    SIGNUP
 ========================= */
 router.post("/signup", async (req, res) => {
-  try {
+  const client = await pool.connect();
 
+  try {
     const { email, password, username, fullName, role } = req.body;
 
     if (!email || !password || !username || !fullName) {
       return res.status(400).json({ error: "All fields are required" });
     }
 
+    const userRole = role || "patient";
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const result = await pool.query(
+    await client.query("BEGIN");
+
+    // Create user
+    const result = await client.query(
       `
       INSERT INTO users
       (email, password_hash, username, full_name, role)
       VALUES ($1,$2,$3,$4,$5)
-      RETURNING id,email,username,full_name
+      RETURNING id,email,username,full_name,role
       `,
-      [email, hashedPassword, username, fullName, role || "patient"]
+      [email, hashedPassword, username, fullName, userRole]
     );
+
+    const user = result.rows[0];
+
+    // Create matching profile
+    await client.query(
+      `
+      INSERT INTO profiles
+      (id, username, full_name, role, is_verified)
+      VALUES ($1,$2,$3,$4,false)
+      `,
+      [
+        user.id,
+        username,
+        fullName,
+        userRole
+      ]
+    );
+
+    await client.query("COMMIT");
 
     res.json({
       message: "Signup successful",
-      user: result.rows[0]
+      user
     });
 
   } catch (error) {
 
+    await client.query("ROLLBACK");
+
     console.error("Signup error:", error);
     res.status(500).json({ error: error.message });
 
+  } finally {
+    client.release();
   }
 });
 

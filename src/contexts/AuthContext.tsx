@@ -7,6 +7,9 @@ interface User {
   fullName?: string;
   role?: string;
   avatar_url?: string; // ✅ ADD THIS
+  phone?: string;
+  date_of_birth?: string;
+  gender?: string;
 }
 
 interface AuthContextType {

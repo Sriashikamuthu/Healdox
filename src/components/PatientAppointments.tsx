@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, MapPin, Video, CheckCircle, XCircle, AlertCircle, User } from 'lucide-react';
-
+ 
 import { useAuth } from '../contexts/AuthContext';
 import { formatDistanceToNow } from '../utils/date';
-
+ 
 interface ConsultationRequest {
   id: string;
   member_id: string;
@@ -22,7 +22,7 @@ interface ConsultationRequest {
     specialty?: string;
   };
 }
-
+ 
 interface Appointment {
   id: string;
   patient_id: string;
@@ -45,71 +45,88 @@ interface Appointment {
     specialty?: string;
   };
 }
-
+ 
 type TabType = 'requests' | 'approved' | 'upcoming' | 'history';
-
+ 
 export function PatientAppointments() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('requests');
   const [consultationRequests, setConsultationRequests] = useState<ConsultationRequest[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const [requestsError, setRequestsError] = useState('');
+  const [appointmentsError, setAppointmentsError] = useState('');
+ 
   useEffect(() => {
     if (user) {
       fetchConsultationRequests();
       fetchAppointments();
     }
   }, [user]);
-
+ 
   const fetchConsultationRequests = async () => {
+ 
+    if (!user?.id) return;
+ 
+    setRequestsError('');
+ 
     try {
-      const { data, error } = await supabase
-        .from('consultation_requests')
-        .select(`
-          *,
-          provider:profiles!consultation_requests_professional_id_fkey(
-            id,
-            username,
-            full_name,
-            specialty
-          )
-        `)
-        .eq('member_id', user?.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setConsultationRequests(data || []);
+ 
+      const res = await fetch(
+        `http://localhost:5000/consultation-requests/${user.id}`
+      );
+ 
+      if (!res.ok) {
+        throw new Error('Request failed');
+      }
+ 
+      const data = await res.json();
+ 
+      setConsultationRequests(Array.isArray(data) ? data : []);
+ 
     } catch (error) {
+ 
       console.error('Error fetching consultation requests:', error);
+      setRequestsError('Unable to load consultation requests. Please try again.');
+      setConsultationRequests([]);
+ 
     }
   };
-
+ 
   const fetchAppointments = async () => {
+ 
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+ 
+    setAppointmentsError('');
+ 
     try {
-      const { data, error } = await supabase
-        .from('appointments')
-        .select(`
-          *,
-          provider:profiles!appointments_provider_id_fkey(
-            id,
-            username,
-            full_name,
-            specialty
-          )
-        `)
-        .eq('patient_id', user?.id)
-        .order('scheduled_date', { ascending: false });
-
-      if (error) throw error;
-      setAppointments(data || []);
+ 
+      const res = await fetch(
+        `http://localhost:5000/appointments/${user.id}`
+      );
+ 
+      if (!res.ok) {
+        throw new Error('Request failed');
+      }
+ 
+      const data = await res.json();
+ 
+      setAppointments(Array.isArray(data) ? data : []);
+ 
     } catch (error) {
+ 
       console.error('Error fetching appointments:', error);
+      setAppointmentsError('Unable to load appointments. Please try again.');
+      setAppointments([]);
+ 
     } finally {
       setLoading(false);
     }
   };
-
+ 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       pending: 'bg-yellow-100 text-yellow-800',
@@ -126,20 +143,20 @@ export function PatientAppointments() {
       </span>
     );
   };
-
+ 
   const pendingRequests = consultationRequests.filter(r => r.status === 'pending');
   const approvedRequests = consultationRequests.filter(r => r.status === 'accepted');
-
+ 
   const now = new Date();
   const upcomingAppointments = appointments.filter(
     a => ['scheduled', 'confirmed'].includes(a.status) && new Date(a.scheduled_date) > now
   );
-
+ 
   const pastAppointments = appointments.filter(
     a => ['completed', 'cancelled', 'no_show'].includes(a.status) ||
     (new Date(a.scheduled_date) < now && !['completed', 'cancelled', 'no_show'].includes(a.status))
   );
-
+ 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -147,12 +164,12 @@ export function PatientAppointments() {
       </div>
     );
   }
-
+ 
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h2 className="text-2xl font-bold mb-6">My Appointments</h2>
-
+ 
         <div className="flex border-b border-gray-200 mb-6 overflow-x-auto">
           <button
             onClick={() => setActiveTab('requests')}
@@ -210,14 +227,29 @@ export function PatientAppointments() {
             History
           </button>
         </div>
-
+ 
         <div className="space-y-4">
+          {requestsError && (
+            <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">
+              {requestsError}
+            </div>
+          )}
+ 
           {activeTab === 'requests' && (
             <>
               {pendingRequests.length === 0 ? (
                 <div className="text-center py-12">
                   <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                  <p className="text-gray-600">No pending consultation requests</p>
+                  <p className="text-gray-600 font-medium mb-1">No appointment requests yet.</p>
+                  <p className="text-gray-500 text-sm mb-4">
+                    Find a physician and request an appointment to get started.
+                  </p>
+                  <a
+                    href="/physicians"
+                    className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                  >
+                    Find Physicians
+                  </a>
                 </div>
               ) : (
                 pendingRequests.map((request) => (
@@ -253,13 +285,13 @@ export function PatientAppointments() {
               )}
             </>
           )}
-
+ 
           {activeTab === 'approved' && (
             <>
               {approvedRequests.length === 0 ? (
                 <div className="text-center py-12">
                   <CheckCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                  <p className="text-gray-600">No approved consultation requests</p>
+                  <p className="text-gray-600">No approved appointments yet.</p>
                 </div>
               ) : (
                 approvedRequests.map((request) => (
@@ -298,13 +330,13 @@ export function PatientAppointments() {
               )}
             </>
           )}
-
+ 
           {activeTab === 'upcoming' && (
             <>
               {upcomingAppointments.length === 0 ? (
                 <div className="text-center py-12">
                   <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                  <p className="text-gray-600">No upcoming appointments</p>
+                  <p className="text-gray-600">No upcoming appointments.</p>
                 </div>
               ) : (
                 upcomingAppointments.map((appointment) => (
@@ -368,13 +400,19 @@ export function PatientAppointments() {
               )}
             </>
           )}
-
+ 
+          {appointmentsError && (
+            <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">
+              {appointmentsError}
+            </div>
+          )}
+ 
           {activeTab === 'history' && (
             <>
               {pastAppointments.length === 0 ? (
                 <div className="text-center py-12">
                   <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                  <p className="text-gray-600">No appointment history</p>
+                  <p className="text-gray-600">No previous appointments.</p>
                 </div>
               ) : (
                 pastAppointments.map((appointment) => (
@@ -419,3 +457,4 @@ export function PatientAppointments() {
     </div>
   );
 }
+ 

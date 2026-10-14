@@ -1,8 +1,9 @@
+
 import { useState } from 'react';
 import { X, AlertTriangle, Calendar } from 'lucide-react';
-
+ 
 import { useAuth } from '../contexts/AuthContext';
-
+ 
 interface CounsellingRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -10,7 +11,7 @@ interface CounsellingRequestModalProps {
   physicianName: string;
   physicianSpecialty: string;
 }
-
+ 
 export function CounsellingRequestModal({
   isOpen,
   onClose,
@@ -26,34 +27,51 @@ export function CounsellingRequestModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-
+ 
   if (!isOpen) return null;
-
+ 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim() || !description.trim()) {
       setError('Please provide topic and description for the counselling session');
       return;
     }
-
+ 
     setLoading(true);
     setError('');
-
+ 
     try {
-      const { error: sessionError } = await supabase
-        .from('counselling_sessions')
-        .insert({
+      const preferredTimeLabel =
+        preferredTime === 'morning'
+          ? 'Morning (8 AM - 12 PM)'
+          : preferredTime === 'afternoon'
+          ? 'Afternoon (12 PM - 4 PM)'
+          : 'Evening (4 PM - 8 PM)';
+ 
+      const message =
+        `Topic: ${topic}\n\n${description}\n\n` +
+        `Preferred date: ${preferredDate || 'Flexible'}\n` +
+        `Preferred time: ${preferredTimeLabel}`;
+ 
+      const res = await fetch("http://localhost:5000/consultation-requests", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
           member_id: user?.id,
-          physician_id: physicianId,
-          topic,
-          description,
-          preferred_date: preferredDate || null,
-          preferred_time: preferredTime,
-          status: 'pending',
-        });
-
-      if (sessionError) throw sessionError;
-
+          professional_id: physicianId,
+          request_type: "counselling",
+          message
+        })
+      });
+ 
+      const data = await res.json();
+ 
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to request counselling session');
+      }
+ 
       setSuccess(true);
       setTimeout(() => {
         onClose();
@@ -64,14 +82,15 @@ export function CounsellingRequestModal({
         setPreferredTime('morning');
       }, 2000);
     } catch (err: any) {
-      setError(err.message || 'Failed to request counselling session');
+      console.error('Counselling request error:', err);
+      setError('Unable to submit the request. Please try again.');
     } finally {
       setLoading(false);
     }
   };
-
+ 
   const today = new Date().toISOString().split('T')[0];
-
+ 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 relative my-8">
@@ -81,12 +100,12 @@ export function CounsellingRequestModal({
         >
           <X className="w-5 h-5" />
         </button>
-
+ 
         <h2 className="text-2xl font-bold mb-2">Request Counselling Session</h2>
         <p className="text-gray-600 mb-4">
           Dr. {physicianName} - {physicianSpecialty}
         </p>
-
+ 
         <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 mb-6">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -102,15 +121,15 @@ export function CounsellingRequestModal({
             </div>
           </div>
         </div>
-
+ 
         {success ? (
           <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
             <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Calendar className="w-6 h-6 text-green-600" />
             </div>
-            <h3 className="text-lg font-bold text-green-900 mb-2">Counselling Request Sent!</h3>
+            <h3 className="text-lg font-bold text-green-900 mb-2">Counselling request submitted successfully.</h3>
             <p className="text-green-800">
-              Dr. {physicianName} will review your request and schedule a session with you.
+              Dr. {physicianName} will review your request and confirm the session.
             </p>
           </div>
         ) : (
@@ -128,7 +147,7 @@ export function CounsellingRequestModal({
                 required
               />
             </div>
-
+ 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Description *
@@ -142,7 +161,7 @@ export function CounsellingRequestModal({
                 required
               />
             </div>
-
+ 
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -156,7 +175,7 @@ export function CounsellingRequestModal({
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-
+ 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Preferred Time
@@ -172,20 +191,20 @@ export function CounsellingRequestModal({
                 </select>
               </div>
             </div>
-
+ 
             <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
               <p className="text-sm text-yellow-800">
                 <span className="font-semibold">Note:</span> The physician will review your request and confirm the
                 actual session date and time. You'll be notified once the session is scheduled.
               </p>
             </div>
-
+ 
             {error && (
               <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">
                 {error}
               </div>
             )}
-
+ 
             <div className="flex gap-3">
               <button
                 type="button"
@@ -208,3 +227,4 @@ export function CounsellingRequestModal({
     </div>
   );
 }
+ 

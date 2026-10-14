@@ -3,17 +3,28 @@ import { User, Upload, X, FileText, Image, Film, File, Download, Trash2, AlertTr
 import { useAuth } from '../contexts/AuthContext';
 import { AIHealthcareSearch } from './AIHealthcareSearch';
 import CounsellingSessions from './CounsellingSessions';
-
+ 
 interface MedicalRecord {
   id: string;
-  file_name: string;
-  file_path: string;
-  file_type: string;
-  file_size: number;
+  record_name: string;
+  record_url: string;
+  record_type: string;
+  record_date: string;
   description: string;
-  uploaded_at: string;
 }
-
+ 
+interface ProfileInfo {
+  id: string;
+  username?: string;
+  email?: string;
+  avatar_url?: string;
+  full_name?: string;
+  phone?: string;
+  date_of_birth?: string;
+  gender?: string;
+  role?: string;
+}
+ 
 interface ConsultationRequest {
   id: string;
   message: string;
@@ -26,7 +37,7 @@ interface ConsultationRequest {
     specialization?: string;
   };
 }
-
+ 
 export function PatientProfile() {
   const { user, setUser } = useAuth();
   const [records, setRecords] = useState<MedicalRecord[]>([]);
@@ -40,123 +51,160 @@ export function PatientProfile() {
   const [profilePicture, setProfilePicture] = useState<File | null>(null);
   const [profilePicturePreview, setProfilePicturePreview] = useState<string>('');
   const [updatingProfile, setUpdatingProfile] = useState(false);
-
+ 
+  const [profileInfo, setProfileInfo] = useState<ProfileInfo | null>(null);
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [savingInfo, setSavingInfo] = useState(false);
+  const [formFullName, setFormFullName] = useState('');
+  const [formPhone, setFormPhone] = useState('');
+  const [formDob, setFormDob] = useState('');
+  const [formGender, setFormGender] = useState('');
+ 
   useEffect(() => {
     if (user?.avatar_url) {
       setProfilePicturePreview(user.avatar_url);
     }
   }, [user?.avatar_url]);
-
+ 
   const fetchRecords = async () => {
     try {
-
+ 
       const res = await fetch(
-        `http://localhost:5000/medical-records/${user?.id}`
+        `http://localhost:5000/api/medical-records/${user?.id}`
       );
-
+ 
       const data = await res.json();
-
+ 
       setRecords(data || []);
-
+ 
     } catch (error) {
-
+ 
       console.error("Error fetching medical records:", error);
-
+ 
     } finally {
-
+ 
       setLoading(false);
-
+ 
     }
   };
-
+ 
   const fetchConsultationRequests = async () => {
     try {
-
+ 
       const res = await fetch(
         `http://localhost:5000/consultation-requests/${user?.id}`
       );
-
+ 
       const data = await res.json();
-
+ 
       setConsultationRequests(data || []);
-
+ 
     } catch (error) {
-
+ 
       console.error(
         "Error fetching consultation requests:",
         error
       );
-
+ 
     }
   };
-
+ 
+  const fetchProfileInfo = async () => {
+    if (!user?.id) return;
+ 
+    try {
+ 
+      const res = await fetch(
+        `http://localhost:5000/profile/${user.id}`
+      );
+ 
+      const data = await res.json();
+ 
+      setProfileInfo(data || null);
+      setFormFullName(data?.full_name || '');
+      setFormPhone(data?.phone || '');
+      setFormDob(
+        data?.date_of_birth
+          ? String(data.date_of_birth).split('T')[0]
+          : ''
+      );
+      setFormGender(data?.gender || '');
+ 
+    } catch (error) {
+ 
+      console.error("Error fetching profile info:", error);
+ 
+    }
+  };
+ 
   // ✅ THEN call them
   useEffect(() => {
-
+ 
     if (user?.id) {
-
+ 
       fetchRecords();
       fetchConsultationRequests();
-
+      fetchProfileInfo();
+ 
     }
-
+ 
   }, [user?.id]);  
-
+ 
   const downloadFile = async (record: MedicalRecord) => {
-
+ 
     try {
-
+ 
       const url =
-        `http://localhost:5000/uploads/${record.file_path}`;
-
+        `http://localhost:5000/uploads/${record.record_url}`;
+ 
       const a = document.createElement("a");
-
+ 
       a.href = url;
       a.download = record.file_name;
-
+ 
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-
+ 
     } catch (error) {
-
+ 
       console.error("Download error:", error);
       alert("Failed to download file");
-
+ 
     }
-
+ 
   };
-
+ 
   const deleteFile = async (record: MedicalRecord) => {
-
+ 
     if (!confirm("Delete this file?")) return;
-
+ 
     try {
-
+ 
       const res = await fetch(
-        `http://localhost:5000/delete-medical-record/${record.id}`,
+        `http://localhost:5000/api/medical-records/${record.id}`,
         {
           method: "DELETE"
         }
       );
-
+ 
       const data = await res.json();
-
+ 
       if (!res.ok) {
         throw new Error(data.error);
       }
-
+ 
       fetchRecords();
-
+ 
     } catch (error) {
-
+ 
       console.error("Delete error:", error);
       alert("Failed to delete file");
-
+ 
     }
-
+ 
   };  
-
+ 
   const handleProfilePictureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -173,56 +221,56 @@ export function PatientProfile() {
       setError('');
     }
   };
-
+ 
   const updateProfilePicture = async () => {
-
+ 
     if (!profilePicture) return;
-
+ 
     try {
-
+ 
       setUpdatingProfile(true);
-
+ 
       const formData = new FormData();
       formData.append("avatar", profilePicture);
       formData.append("user_id", user.id);
-
+ 
       const res = await fetch("http://localhost:5000/upload-profile", {
         method: "POST",
         body: formData
       });
-
+ 
       const data = await res.json();
-
+ 
       console.log("Upload response:", data);
-
+ 
       if (!res.ok) {
         throw new Error(data.error || "Upload failed");
       }
-
+ 
       // ✅ 🔥 THIS IS THE IMPORTANT PART
       const updatedUser = {
         ...user,
         avatar_url: data.file_url
       };
-
+ 
       setUser(updatedUser); // update context
       localStorage.setItem("user", JSON.stringify(updatedUser)); // persist
-
+ 
       alert("Profile picture updated successfully!");
-
+ 
     } catch (err) {
-
+ 
       console.error("UPLOAD ERROR:", err);
       alert("Upload failed");
-
+ 
     } finally {
-
+ 
       setUpdatingProfile(false);
-
+ 
     }
-
+ 
   };
-
+ 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -235,54 +283,157 @@ export function PatientProfile() {
       setError('');
     }
   };
-
+ 
   const uploadFile = async () => {
     if (!selectedFile || !user?.id) return;
-
+ 
     setUploading(true);
     setError('');
-
+ 
     try {
       const formData = new FormData();
-
+ 
       formData.append("file", selectedFile);
-      formData.append("user_id", user.id);
-      formData.append("file_type", fileType);
+      formData.append("dependent_id", user.id);
+      formData.append("record_type", fileType);
+      formData.append("record_name", selectedFile.name);
+      formData.append("record_date", new Date().toISOString().split("T")[0]);
       formData.append("description", description);
-
+ 
       const res = await fetch(
-        "http://localhost:5000/upload-medical-record",
+        "http://localhost:5000/api/medical-records/",
         {
           method: "POST",
           body: formData
         }
       );
-
+ 
       const data = await res.json();
-
+ 
       if (!res.ok) {
         throw new Error(data.error || "Upload failed");
       }
-
+ 
       alert("File uploaded successfully!");
-
+ 
       setSelectedFile(null);
       setDescription("");
-
+ 
       fetchRecords(); // refresh list
-
+ 
     } catch (err: any) {
-
+ 
       console.error("UPLOAD ERROR:", err);
       setError(err.message || "Upload failed");
-
+ 
     } finally {
-
+ 
       setUploading(false);
-
+ 
     }
   };
-
+ 
+  const calculateAge = (dob?: string): number | null => {
+    if (!dob) return null;
+ 
+    const birthDate = new Date(dob);
+ 
+    if (isNaN(birthDate.getTime())) return null;
+ 
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+ 
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < birthDate.getDate())
+    ) {
+      age--;
+    }
+ 
+    return age >= 0 ? age : null;
+  };
+ 
+  const formatDob = (dob?: string): string => {
+    if (!dob) return 'Not provided';
+ 
+    const d = new Date(dob);
+ 
+    if (isNaN(d.getTime())) return 'Not provided';
+ 
+    return d.toLocaleDateString();
+  };
+ 
+  const cancelEditInfo = () => {
+    setEditingInfo(false);
+    setFormFullName(profileInfo?.full_name || '');
+    setFormPhone(profileInfo?.phone || '');
+    setFormDob(
+      profileInfo?.date_of_birth
+        ? String(profileInfo.date_of_birth).split('T')[0]
+        : ''
+    );
+    setFormGender(profileInfo?.gender || '');
+  };
+ 
+  const saveProfileInfo = async () => {
+    if (!user?.id) return;
+ 
+    setSavingInfo(true);
+ 
+    try {
+ 
+      const res = await fetch(
+        `http://localhost:5000/profile/${user.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            full_name: formFullName,
+            phone: formPhone,
+            date_of_birth: formDob || null,
+            gender: formGender
+          })
+        }
+      );
+ 
+      const data = await res.json();
+ 
+      if (!res.ok) {
+        throw new Error(data.error || "Profile update failed");
+      }
+ 
+      setProfileInfo(data);
+ 
+      const updatedUser = {
+        ...user,
+        fullName: data.full_name || user.fullName,
+        phone: data.phone,
+        date_of_birth: data.date_of_birth,
+        gender: data.gender
+      };
+ 
+      setUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+ 
+      setEditingInfo(false);
+ 
+      alert("Profile updated successfully!");
+ 
+    } catch (err) {
+ 
+      console.error("Profile info update error:", err);
+      alert("Failed to update profile");
+ 
+    } finally {
+ 
+      setSavingInfo(false);
+ 
+    }
+  };
+ 
   const getFileIcon = (type: string) => {
     switch (type) {
       case 'image':
@@ -297,13 +448,13 @@ export function PatientProfile() {
         return <File className="w-8 h-8 text-gray-600" />;
     }
   };
-
+ 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
-
+ 
   return (
     <div className="w-full px-4 py-8">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -319,7 +470,7 @@ export function PatientProfile() {
               Medical Suggestions
             </a>
           </div>
-
+ 
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
         <div className="flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -334,11 +485,120 @@ export function PatientProfile() {
           </div>
         </div>
       </div>
-
+ 
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-900">Personal Information</h2>
+ 
+          {!editingInfo ? (
+            <button
+              onClick={() => setEditingInfo(true)}
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Edit
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                onClick={saveProfileInfo}
+                disabled={savingInfo}
+                className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
+              >
+                {savingInfo ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={cancelEditInfo}
+                disabled={savingInfo}
+                className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+ 
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Full Name</label>
+            {editingInfo ? (
+              <input
+                type="text"
+                value={formFullName}
+                onChange={(e) => setFormFullName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            ) : (
+              <p className="text-gray-900 break-words">{profileInfo?.full_name || 'Not provided'}</p>
+            )}
+          </div>
+ 
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
+            <p className="text-gray-900 break-words">{profileInfo?.email || user?.email || 'Not provided'}</p>
+          </div>
+ 
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Phone Number</label>
+            {editingInfo ? (
+              <input
+                type="tel"
+                value={formPhone}
+                onChange={(e) => setFormPhone(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            ) : (
+              <p className="text-gray-900 break-words">{profileInfo?.phone || 'Not provided'}</p>
+            )}
+          </div>
+ 
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Date of Birth</label>
+            {editingInfo ? (
+              <input
+                type="date"
+                value={formDob}
+                onChange={(e) => setFormDob(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            ) : (
+              <p className="text-gray-900">{formatDob(profileInfo?.date_of_birth)}</p>
+            )}
+          </div>
+ 
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Age</label>
+            <p className="text-gray-900">
+              {calculateAge(profileInfo?.date_of_birth) !== null
+                ? `${calculateAge(profileInfo?.date_of_birth)} years`
+                : 'Not provided'}
+            </p>
+          </div>
+ 
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Gender</label>
+            {editingInfo ? (
+              <select
+                value={formGender}
+                onChange={(e) => setFormGender(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">Select...</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+                <option value="prefer_not_to_say">Prefer not to say</option>
+              </select>
+            ) : (
+              <p className="text-gray-900 capitalize">{profileInfo?.gender || 'Not provided'}</p>
+            )}
+          </div>
+        </div>
+      </div>
+ 
       <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Profile Picture</h2>
         <div className="flex items-center gap-6">
-
+ 
           {/* IMAGE PREVIEW */}
           <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border-4 border-gray-300">
             {profilePicturePreview ? (
@@ -350,16 +610,16 @@ export function PatientProfile() {
               <User className="w-12 h-12 text-gray-400" />
             )}
           </div>
-
+ 
           {/* BUTTONS */}
           <div className="flex-1 flex items-center gap-3">
-
+ 
             <label className="cursor-pointer inline-block">
               <div className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md">
                 <Upload className="w-4 h-4" />
                 <span>{profilePicture ? "Change Photo" : "Upload Photo"}</span>
               </div>
-
+ 
               <input
                 type="file"
                 accept="image/*"
@@ -367,7 +627,7 @@ export function PatientProfile() {
                 className="hidden"
               />
             </label>
-
+ 
             {/* ✅ SAVE BUTTON ALWAYS VISIBLE */}
             <button
               onClick={updateProfilePicture}
@@ -378,18 +638,18 @@ export function PatientProfile() {
             >
               {updatingProfile ? "Saving..." : "Save"}
             </button>
-
+ 
             <p className="text-xs text-gray-500 mt-2">
               Max 5MB, JPG, PNG or GIF
             </p>
-
+ 
           </div>
         </div>
       </div>
-
+ 
       <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">My Consultation Requests</h2>
-
+ 
         {loading ? (
           <div className="text-center py-8 text-gray-600">Loading requests...</div>
         ) : consultationRequests.length === 0 ? (
@@ -445,10 +705,10 @@ export function PatientProfile() {
           </div>
         )}
       </div>
-
+ 
       <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Upload Medical Records</h2>
-
+ 
         <div className="space-y-4">
           <div className="grid md:grid-cols-2 gap-4">
             <div>
@@ -466,7 +726,7 @@ export function PatientProfile() {
                 <option value="document">Document / Report</option>
               </select>
             </div>
-
+ 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Select File
@@ -493,7 +753,7 @@ export function PatientProfile() {
               </label>
             </div>
           </div>
-
+ 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Description (Optional)
@@ -506,13 +766,13 @@ export function PatientProfile() {
               placeholder="Add notes about this file..."
             />
           </div>
-
+ 
           {error && (
             <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">
               {error}
             </div>
           )}
-
+ 
           <button
             onClick={uploadFile}
             disabled={!selectedFile || uploading}
@@ -522,10 +782,10 @@ export function PatientProfile() {
           </button>
         </div>
       </div>
-
+ 
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">My Medical Records</h2>
-
+ 
         {loading ? (
           <div className="text-center py-8 text-gray-600">Loading records...</div>
         ) : records.length === 0 ? (
@@ -538,7 +798,7 @@ export function PatientProfile() {
               <div key={record.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                    {getFileIcon(record.file_type)}
+                    {getFileIcon(record.record_type)}
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -557,17 +817,16 @@ export function PatientProfile() {
                     </button>
                   </div>
                 </div>
-
-                <h3 className="font-medium text-gray-900 text-sm mb-1 truncate" title={record.file_name}>
-                  {record.file_name}
+ 
+                <h3 className="font-medium text-gray-900 text-sm mb-1 truncate" title={record.record_name}>
+                  {record.record_name}
                 </h3>
-
+ 
                 <div className="space-y-1 text-xs text-gray-600">
-                  <p className="capitalize">{record.file_type}</p>
-                  <p>{formatFileSize(record.file_size)}</p>
-                  <p>{new Date(record.uploaded_at).toLocaleDateString()}</p>
+                  <p className="capitalize">{record.record_type}</p>
+                  <p>{new Date(record.record_date).toLocaleDateString()}</p>
                 </div>
-
+ 
                 {record.description && (
                   <p className="mt-2 text-xs text-gray-600 line-clamp-2">
                     {record.description}
@@ -579,7 +838,7 @@ export function PatientProfile() {
         )}
       </div>
         </div>
-
+ 
         <div className="lg:col-span-1 space-y-6">
           <AIHealthcareSearch />
           <CounsellingSessions />
