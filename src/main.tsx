@@ -3,13 +3,14 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
-
-// ✅ IMPORT THIS
 import { AuthProvider } from "./contexts/AuthContext";
+import { installApiFetchPatch } from "./lib/api";
+
+installApiFetchPatch();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AuthProvider>   {/* ✅ ADD THIS */}
+    <AuthProvider>
       <BrowserRouter>
         <App />
       </BrowserRouter>

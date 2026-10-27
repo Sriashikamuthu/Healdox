@@ -3,51 +3,91 @@ import crypto from "crypto";
 import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import pool from "../db.js";
-import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
-const router = express.Router();
 
-/* =========================
-   SIGNUP
-========================= */
+const router = express.Router();
+const ALLOWED_ROLES = new Set([
+  "patient",
+  "physician",
+  "nurse",
+  "lab",
+  "pharma_company",
+]);
+
+function createToken(user) {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is not configured");
+  }
+
+  return jwt.sign(
+    { id: String(user.id), role: user.role || "patient" },
+    process.env.JWT_SECRET,
+    { expiresIn: "2h" }
+  );
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    avatar_url: user.avatar_url || "",
+    fullName: user.full_name || "",
+    full_name: user.full_name || "",
+    role: user.role || "patient",
+    is_verified: user.is_verified !== false,
+    specialty: user.specialty || null,
+    medicine_system: user.medicine_system || null,
+    bio: user.bio || null,
+    license_number: user.license_number || null,
+  };
+}
+
 router.post("/signup", async (req, res) => {
   try {
-
     const { email, password, username, fullName, role } = req.body;
 
     if (!email || !password || !username || !fullName) {
       return res.status(400).json({ error: "All fields are required" });
     }
 
+    if (String(password).length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+
+    const safeRole = ALLOWED_ROLES.has(role) ? role : "patient";
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
       `
       INSERT INTO users
-      (email, password_hash, username, full_name, role)
-      VALUES ($1,$2,$3,$4,$5)
-      RETURNING id,email,username,full_name
+      (email, password_hash, username, full_name, role, is_verified)
+      VALUES ($1,$2,$3,$4,$5,$6)
+      RETURNING id, email, username, full_name, role, avatar_url, is_verified,
+                specialty, medicine_system, bio, license_number
       `,
-      [email, hashedPassword, username, fullName, role || "patient"]
+      [
+        email,
+        hashedPassword,
+        username,
+        fullName,
+        safeRole,
+        safeRole === "patient",
+      ]
     );
 
     res.json({
       message: "Signup successful",
-      user: result.rows[0]
+      user: publicUser(result.rows[0]),
     });
-
   } catch (error) {
-
     console.error("Signup error:", error);
-    res.status(500).json({ error: error.message });
-
+    if (error.code === "23505") {
+      return res.status(409).json({ error: "Email or username already exists" });
+    }
+    res.status(500).json({ error: "Signup failed" });
   }
 });
-
-/* =========================
-   LOGIN
-========================= */
-
 
 router.post("/login", async (req, res) => {
   try {
@@ -60,7 +100,8 @@ router.post("/login", async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT id, email, username, full_name, role, password_hash, avatar_url
+      `SELECT id, email, username, full_name, role, password_hash, avatar_url,
+              is_verified, specialty, medicine_system, bio, license_number
        FROM users
        WHERE email = $1`,
       [email]
@@ -73,10 +114,7 @@ router.post("/login", async (req, res) => {
     }
 
     const user = result.rows[0];
-    const passwordMatches = await bcrypt.compare(
-      password,
-      user.password_hash
-    );
+    const passwordMatches = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatches) {
       return res.status(401).json({
@@ -84,27 +122,12 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    if (!process.env.JWT_SECRET) {
-      throw new Error("JWT_SECRET is not configured");
-    }
-
-    const token = jwt.sign(
-      { id: user.id },
-      process.env.JWT_SECRET,
-      { expiresIn: "2h" }
-    );
+    const token = createToken(user);
 
     return res.json({
       message: "Login success",
       token,
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        avatar_url: user.avatar_url || "",
-        fullName: user.full_name || "",
-        role: user.role || "patient",
-      },
+      user: publicUser(user),
     });
   } catch (err) {
     console.error("Login error:", err.message);
@@ -114,45 +137,52 @@ router.post("/login", async (req, res) => {
   }
 });
 
-/* =========================
-   FORGOT PASSWORD
-========================= */
 router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
+    const genericMessage = { message: "If that account exists, a reset email has been sent" };
 
-    const user = await pool.query(
-      "SELECT * FROM users WHERE email=$1",
-      [email]
-    );
+    if (!email) {
+      return res.json(genericMessage);
+    }
+
+    const user = await pool.query("SELECT id, email FROM users WHERE email=$1", [
+      email,
+    ]);
 
     if (user.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
+      return res.json(genericMessage);
     }
 
     const token = crypto.randomBytes(32).toString("hex");
-
-    const expires = new Date(Date.now() + 3600000); // 1 hour
+    const expires = new Date(Date.now() + 3600000);
 
     await pool.query(
       "INSERT INTO password_resets (email, token, expires_at) VALUES ($1,$2,$3)",
       [email, token, expires]
     );
 
-    const resetLink = `http://localhost:5173/reset-password/${token}`;
+    const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(
+      /\/$/,
+      ""
+    );
+    const resetLink = `${frontendUrl}/reset-password/${token}`;
 
-    dotenv.config();
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      console.error("SMTP is not configured; password reset email was not sent");
+      return res.json(genericMessage);
+    }
 
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      service: process.env.SMTP_SERVICE || "gmail",
       auth: {
-        user: "ramyashree972000@gmail.com",
-        pass: "kauwseehagwyhfvh",
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
       },
     });
 
     await transporter.sendMail({
-      from: '"HealDox Support" <ramyashree972000@gmail.com>',
+      from: process.env.SMTP_FROM || `"HealDox Support" <${process.env.SMTP_USER}>`,
       to: email,
       subject: "Reset your HealDox password",
       html: `
@@ -163,19 +193,20 @@ router.post("/forgot-password", async (req, res) => {
       `,
     });
 
-    res.json({ message: "Reset email sent" });
+    res.json(genericMessage);
   } catch (err) {
     console.error("Forgot password error:", err);
     res.status(500).json({ error: "Failed to send email" });
   }
 });
 
-/* =========================
-   RESET PASSWORD
-========================= */
 router.post("/reset-password", async (req, res) => {
   try {
     const { token, password } = req.body;
+
+    if (!password || String(password).length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
 
     const reset = await pool.query(
       "SELECT * FROM password_resets WHERE token=$1",
@@ -194,15 +225,12 @@ router.post("/reset-password", async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await pool.query(
-      "UPDATE users SET password_hash=$1 WHERE email=$2",
-      [hashedPassword, record.email]
-    );
+    await pool.query("UPDATE users SET password_hash=$1 WHERE email=$2", [
+      hashedPassword,
+      record.email,
+    ]);
 
-    await pool.query(
-      "DELETE FROM password_resets WHERE email=$1",
-      [record.email]
-    );
+    await pool.query("DELETE FROM password_resets WHERE email=$1", [record.email]);
 
     res.json({ message: "Password updated successfully" });
   } catch (err) {

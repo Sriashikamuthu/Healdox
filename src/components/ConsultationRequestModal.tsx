@@ -18,7 +18,7 @@ export function ConsultationRequestModal({
   physicianName,
   physicianSpecialty,
 }: ConsultationRequestModalProps) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [message, setMessage] = useState('');
   const [requestType, setRequestType] = useState<'advice' | 'second-opinion' | 'televisit'>('advice');
   const [medicalRecords, setMedicalRecords] = useState<File[]>([]);
@@ -63,15 +63,17 @@ export function ConsultationRequestModal({
 });
 
   const data = await response.json();
+  console.log("Medical records upload response:", data);
 
   if (!response.ok) {
     throw new Error(
       data.error || "Failed to upload medical records"
     );
   }
+  console.log("Files returned by backend:", data.files);
 
   return data.files.map(
-    (file: { file_url: string }) => file.file_url
+    (file: { record_url: string }) => file.record_url
   );
 };
 
@@ -92,31 +94,38 @@ export function ConsultationRequestModal({
   setError('');
 
   try {
-    const response = await fetch(
-      "http://localhost:5000/consultation-requests",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          member_id: user.id,
-          professional_id: physicianId,
-          request_type: requestType,
-          message: message.trim(),
-        }),
-      }
-    );
+    
+const authToken = token || localStorage.getItem("token");
 
-    const data = await response.json();
+if (!authToken) {
+  throw new Error("Your session has expired. Please sign in again.");
+}
 
-    if (!response.ok) {
-      throw new Error(
-        data.error || "Failed to send consultation request"
-      );
-    }
+const response = await fetch(
+  "http://localhost:5000/consultation-requests",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({
+      professional_id: physicianId,
+      request_type: requestType,
+      message: message.trim(),
+    }),
+  }
+);
 
-    console.log("Consultation request created:", data);
+const data = await response.json();
+
+if (!response.ok) {
+  throw new Error(
+    data.error || "Failed to send consultation request"
+  );
+}
+
+console.log("Consultation request created:", data);
 
 if (medicalRecords.length > 0) {
   try {
@@ -133,6 +142,7 @@ if (medicalRecords.length > 0) {
     return;
   }
 }
+
 
 setSuccess(true);
 

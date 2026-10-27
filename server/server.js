@@ -2,12 +2,13 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import dotenv from "dotenv";
+dotenv.config();
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import http from "http";
 import multer from "multer";
 import { Server } from "socket.io";
 import { fileURLToPath } from "url";
-import OpenAI from "openai";
 
 import pool from "./db.js";
 import authRoutes from "./routes/auth.js";
@@ -17,9 +18,11 @@ import notificationsRoutes from "./routes/notifications.js";
 import discussionsRoutes from "./routes/discussions.js";
 import subscriptionPlansRoutes from "./routes/subscription-plans.js";
 import subscriptionsRoutes from "./routes/subscriptions.js";
-import { authenticateToken } from "./middleware/authMiddleware.js";
+import dataRoutes from "./routes/data.js";
+import appRoutes from "./routes/app.js";
+import { authenticateToken, optionalAuth } from "./middleware/authMiddleware.js";
 import jwt from "jsonwebtoken";
-dotenv.config();
+
 
 const app = express();
 
@@ -27,12 +30,22 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+      return callback(null, true);
+    }
+    return callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+}));
+app.use(express.json({ limit: "2mb" }));
+app.use(optionalAuth);
 
 app.use(
   "/uploads",
@@ -56,6 +69,8 @@ app.use(
 
 app.use("/api/subscription-plans", subscriptionPlansRoutes);
 app.use("/api/subscriptions", subscriptionsRoutes);
+app.use("/api/data", dataRoutes);
+app.use("/", appRoutes);
 
 /* =========================
    CREATE POST
@@ -383,35 +398,6 @@ app.put("/comments/:id", async (req, res) => {
 
 });
 
-const editComment = async (commentId, postId) => {
-
-  try {
-
-    await fetch(`http://localhost:5000/comments/${commentId}`, {
-      method: "PUT",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        comment: editedText
-      })
-    });
-
-    setEditingCommentId(null);
-    setEditedText("");
-
-    await fetchComments(postId);   // reload comments
-    fetchPosts();                  // update count
-
-  } catch (err) {
-
-    console.error("Edit comment error:", err);
-
-  }
-
-};
-
 app.delete("/posts/:id", async (req, res) => {
 
   try {
@@ -472,7 +458,7 @@ app.post("/login", async (req, res) => {
 
     const result = await pool.query(
       `SELECT id, username, email, password_hash,
-              avatar_url, full_name, role
+              avatar_url, full_name, role, is_verified, specialty, medicine_system
        FROM users
        WHERE email = $1`,
       [email]
@@ -502,7 +488,7 @@ app.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id },
+      { id: String(user.id), role: user.role || "patient" },
       process.env.JWT_SECRET,
       { expiresIn: "2h" }
     );
@@ -516,7 +502,11 @@ app.post("/login", async (req, res) => {
         username: user.username,
         avatar_url: user.avatar_url || "",
         fullName: user.full_name || "",
+        full_name: user.full_name || "",
         role: user.role || "patient",
+        is_verified: user.is_verified !== false,
+        specialty: user.specialty || null,
+        medicine_system: user.medicine_system || null,
       },
     });
   } catch (err) {
@@ -531,13 +521,13 @@ app.post("/login", async (req, res) => {
    START SERVER
 ========================= */
 
-const PORT = 5000;
+const PORT = Number(process.env.PORT || 5000);
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: allowedOrigins,
     methods: ["GET", "POST"]
   }
 });
@@ -588,15 +578,16 @@ const medicalUpload = multer({
   },
 });
 
-app.post("/upload-profile", upload.single("avatar"), async (req, res) => {
+app.post("/upload-profile", authenticateToken, upload.single("avatar"), async (req, res) => {
   try {
-    const userId = req.body.user_id;
+    const userId = req.user.id;
 
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
-    const fileUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+    const publicBase = (process.env.PUBLIC_API_URL || `http://localhost:${PORT}`).replace(/\/$/, "");
+    const fileUrl = `${publicBase}/uploads/${req.file.filename}`;
 
     await pool.query(
       "UPDATE users SET avatar_url = $1 WHERE id = $2",
@@ -659,36 +650,49 @@ app.post(
 
       const uploadedFiles = [];
 
-      for (const file of req.files) {
-        const fileUrl = `/medical-records/${file.filename}/download`;
+for (const file of req.files) {
+  savedFilePaths.push(
+  path.join(__dirname, "private-medical-records", file.filename)
+);
+  const result = await client.query(
+    `INSERT INTO medical_records
+      (record_type, record_name, record_date, description,
+       record_url, consultation_id, storage_filename)
+     VALUES ($1, $2, CURRENT_DATE, $3, $4, $5, $6)
+     RETURNING id, record_name, consultation_id`,
+    [
+      "lab_report",
+      file.originalname,
+      "Uploaded for consultation",
+      "",
+      consultationId,
+      file.filename,
+    ]
+  );
 
-        const result = await client.query(
-          `INSERT INTO medical_records
-            (record_type, record_name, record_date, description,
-             record_url, consultation_id)
-           VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)
-           RETURNING id, record_name, record_url, consultation_id`,
-          [
-            "lab_report",
-            file.originalname,
-            "Uploaded for consultation",
-            fileUrl,
-            consultationId,
-          ]
-        );
+  const record = result.rows[0];
+  const recordUrl = `/medical-records/${record.id}/download`;
 
-        savedFilePaths.push(file.path);
-        uploadedFiles.push(result.rows[0]);
-      }
+  const updatedRecord = await client.query(
+    `UPDATE medical_records
+     SET record_url = $1
+     WHERE id = $2
+     RETURNING id, record_name, record_url, consultation_id`,
+    [recordUrl, record.id]
+  );
+
+  uploadedFiles.push(updatedRecord.rows[0]);
+}
+
 
       await client.query("COMMIT");
 
-      console.log("Medical records saved:", uploadedFiles);
+console.log("Medical records saved:", uploadedFiles);
 
-      res.json({
-        message: "Medical records uploaded and saved successfully",
-        files: uploadedFiles,
-      });
+res.json({
+  message: "Medical records uploaded and saved successfully",
+  files: uploadedFiles,
+});
     } catch (err) {
       await client.query("ROLLBACK");
 
@@ -721,15 +725,16 @@ app.get(
       const userId = req.user.id;
 
       const result = await pool.query(
-        `SELECT mr.record_name, mr.record_url
-         FROM medical_records mr
-         JOIN consultation_requests cr
-           ON cr.id = mr.consultation_id
-         WHERE mr.id = $1
-           AND (
-             cr.member_id = $2
-             OR cr.professional_id = $2
-           )`,
+        
+`SELECT mr.record_name, mr.storage_filename
+ FROM medical_records mr
+ JOIN consultation_requests cr
+   ON cr.id = mr.consultation_id
+ WHERE mr.id = $1
+   AND (
+     cr.member_id = $2
+     OR cr.professional_id = $2
+   )`,
         [recordId, userId]
       );
 
@@ -739,16 +744,23 @@ app.get(
         });
       }
 
-      const record = result.rows[0];
+      
+const record = result.rows[0];
+const filename = record.storage_filename;
 
-const urlParts = record.record_url.split("/").filter(Boolean);
-const filename = path.basename(urlParts[1] || "");
+if (!filename || path.basename(filename) !== filename) {
+  return res.status(404).json({
+    error: "Medical record file not found",
+  });
+}
 
-      const filePath = path.join(
-        __dirname,
-        "private-medical-records",
-        filename
-      );
+const filePath = path.join(
+  __dirname,
+  "private-medical-records",
+  filename
+);
+
+
 
       const fs = await import("fs/promises");
 
@@ -1049,7 +1061,7 @@ app.get("/users", async (req, res) => {
   try {
 
     const result = await pool.query(
-      "SELECT id, username, email FROM users"
+      "SELECT id, username, full_name, role, avatar_url FROM users"
     );
 
     res.json(result.rows);
@@ -2090,55 +2102,45 @@ app.get("/comments/:discussionId", async (req, res) => {
    CREATE CONSULTATION REQUEST
 ========================= */
 
-app.post("/consultation-requests", async (req, res) => {
-  try {
-    const {
-      member_id,
-      professional_id,
-      request_type,
-      message
-    } = req.body;
+app.post(
+"/consultation-requests",
+authenticateToken,
+async (req, res) => {
+try {
+const memberId = req.user.id;
+const { professional_id, request_type, message } = req.body;
 
-    if (!member_id || !professional_id || !message) {
-      return res.status(400).json({
-        error: "Member, physician and message are required"
-      });
-    }
-
-    const result = await pool.query(
-      `
-      INSERT INTO consultation_requests
-      (
-        member_id,
-        professional_id,
-        request_type,
-        message,
-        status
-      )
-      VALUES ($1, $2, $3, $4, 'pending')
-      RETURNING *
-      `,
-      [
-        member_id,
-        professional_id,
-        request_type || "advice",
-        message
-      ]
-    );
-
-    console.log("Consultation request created:", result.rows[0]);
-
-    res.json(result.rows[0]);
-
-  } catch (error) {
-
-    console.error("Consultation request error:", error);
-
-    res.status(500).json({
-      error: error.message
+  if (!professional_id || !message?.trim()) {
+    return res.status(400).json({
+      error: "Physician and message are required",
     });
   }
-});
+
+  const result = await pool.query(
+    `INSERT INTO consultation_requests
+      (member_id, professional_id, request_type, message, status)
+     VALUES ($1, $2, $3, $4, 'pending')
+     RETURNING id, member_id, professional_id,
+               request_type, message, status, created_at`,
+    [
+      memberId,
+      professional_id,
+      request_type || "advice",
+      message.trim(),
+    ]
+  );
+
+  return res.status(201).json(result.rows[0]);
+} catch (error) {
+  console.error("Consultation request error:", error.message);
+
+  return res.status(500).json({
+    error: "Failed to create consultation request",
+  });
+}
+
+}
+);
 app.post("/comments/helpful", async (req, res) => {
 
   try {
@@ -2176,25 +2178,29 @@ app.post("/comments/helpful", async (req, res) => {
 
 });
 
-app.post('/api/subscription/save', async (req, res) => {
-
-  console.log('API HIT');
-  console.log(req.body);
-
+app.post('/api/subscription/save', authenticateToken, async (req, res) => {
   try {
-
     const {
-      user_email,
       plan_name,
       amount,
       billing_cycle,
       payment_id
     } = req.body;
 
+    const userResult = await pool.query(
+      `SELECT email FROM users WHERE id = $1`,
+      [req.user.id]
+    );
+    const userEmail = userResult.rows[0]?.email;
+    if (!userEmail) {
+      return res.status(401).json({ error: "Authenticated user not found" });
+    }
+
     const result = await pool.query(
       `
       INSERT INTO subscriptions
       (
+        user_id,
         user_email,
         plan_name,
         amount,
@@ -2202,11 +2208,12 @@ app.post('/api/subscription/save', async (req, res) => {
         payment_id,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
       `,
       [
-        user_email,
+        req.user.id,
+        userEmail,
         plan_name,
         amount,
         billing_cycle,
